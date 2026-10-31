@@ -35,8 +35,7 @@ from athena.ai_vision_client import AIVisionClient, GrokClient, PointingTarget
 from athena.cursor_overlay import ClickyCursorOverlay, VoiceState
 from athena.sound_effects import sounds
 from athena.context_inspector import inspector
-from athena.floating_history_overlay import FloatingHistoryCard
-from athena.dictation_manager import DictationManager
+from athena.top_bar_hud import TopBarGlassHUD
 
 logger = logging.getLogger("athena.companion")
 
@@ -71,89 +70,55 @@ class CompanionManager(QObject):
         self.ai_client = AIVisionClient(model=self.config.get("grok_model", "auto"))
         self.grok_client = self.ai_client
 
-        # Reconstructed Feature Engines
-        self.history_hud = FloatingHistoryCard()
-        self.dictation_mgr = DictationManager(self.stt_engine)
+        # Top-Center Black Glass Dynamic Bar HUD
+        self.top_bar_hud = TopBarGlassHUD()
+        self.history_hud = self.top_bar_hud  # Backward compatibility alias
 
         # Pipeline state flags
         self.is_hotkey_down = False
         self._processing_lock = threading.Lock()
         self._stop_hotkey_thread = threading.Event()
 
-        # Start hardware hotkey polling thread
+        # Start hardware hotkey polling thread (Ctrl + Alt)
         self._start_hotkey_listener()
 
     def _start_hotkey_listener(self):
         """Hardware-level hotkey polling thread using GetAsyncKeyState.
         
         Guarantees 100% reliable detection of key press and key release
-        for both the Visual Assistant and Global Dictation.
+        for the unified Ctrl + Alt hotkey.
         """
         user32 = ctypes.windll.user32
 
         def _poll_keys():
-            was_assistant_pressed = False
-            was_dictation_pressed = False
+            was_pressed = False
 
             while not self._stop_hotkey_thread.is_set():
-                hotkey_choice = self.config.get("hotkey", "ctrl+shift").lower()
-                dict_choice = self.config.get("dictation_hotkey", "ctrl+alt").lower()
+                hotkey_choice = self.config.get("hotkey", "ctrl+alt").lower()
 
-                # Evaluate Assistant Hotkey
-                if hotkey_choice == "ctrl+alt":
-                    is_assistant_raw = bool(user32.GetAsyncKeyState(VK_CONTROL) & 0x8000) and bool(
-                        user32.GetAsyncKeyState(VK_MENU) & 0x8000
+                # Evaluate Unified Hotkey (Default: Ctrl + Alt)
+                if hotkey_choice == "ctrl+shift":
+                    is_hotkey_raw = bool(user32.GetAsyncKeyState(VK_CONTROL) & 0x8000) and bool(
+                        user32.GetAsyncKeyState(VK_SHIFT) & 0x8000
                     )
                 elif hotkey_choice == "alt+space":
-                    is_assistant_raw = bool(user32.GetAsyncKeyState(VK_MENU) & 0x8000) and bool(
+                    is_hotkey_raw = bool(user32.GetAsyncKeyState(VK_MENU) & 0x8000) and bool(
                         user32.GetAsyncKeyState(VK_SPACE) & 0x8000
                     )
-                else:  # default "ctrl+shift"
-                    is_assistant_raw = bool(user32.GetAsyncKeyState(VK_CONTROL) & 0x8000) and bool(
-                        user32.GetAsyncKeyState(VK_SHIFT) & 0x8000
-                    )
-
-                # Evaluate Dictation Hotkey (Default: Ctrl+Alt)
-                if dict_choice == "ctrl+shift":
-                    is_dict_raw = bool(user32.GetAsyncKeyState(VK_CONTROL) & 0x8000) and bool(
-                        user32.GetAsyncKeyState(VK_SHIFT) & 0x8000
-                    )
-                elif dict_choice == "alt+space":
-                    is_dict_raw = bool(user32.GetAsyncKeyState(VK_MENU) & 0x8000) and bool(
-                        user32.GetAsyncKeyState(VK_SPACE) & 0x8000
-                    )
-                else:  # default "ctrl+alt"
-                    is_dict_raw = bool(user32.GetAsyncKeyState(VK_CONTROL) & 0x8000) and bool(
+                else:  # Default: "ctrl+alt"
+                    is_hotkey_raw = bool(user32.GetAsyncKeyState(VK_CONTROL) & 0x8000) and bool(
                         user32.GetAsyncKeyState(VK_MENU) & 0x8000
                     )
 
-                # Mutually exclusive priority:
-                # If assistant key is triggered, don't trigger dictation, and vice-versa
-                if is_assistant_raw and is_dict_raw:
-                    # If same combo somehow chosen, assistant takes priority
-                    is_dict = False
-                    is_assistant = True
-                else:
-                    is_assistant = is_assistant_raw and not was_dictation_pressed
-                    is_dict = is_dict_raw and not was_assistant_pressed
-
-                # Assistant State Transitions
-                if is_assistant and not was_assistant_pressed:
-                    was_assistant_pressed = True
+                # State Transitions
+                if is_hotkey_raw and not was_pressed:
+                    was_pressed = True
                     self.is_hotkey_down = True
                     self._on_hotkey_pressed()
-                elif not is_assistant and was_assistant_pressed:
-                    was_assistant_pressed = False
+                elif not is_hotkey_raw and was_pressed:
+                    was_pressed = False
                     self.is_hotkey_down = False
                     self._on_hotkey_released()
-
-                # Dictation State Transitions
-                if is_dict and not was_dictation_pressed:
-                    was_dictation_pressed = True
-                    self._on_dictation_pressed()
-                elif not is_dict and was_dictation_pressed:
-                    was_dictation_pressed = False
-                    self._on_dictation_released()
 
                 time.sleep(0.015)  # ~66 Hz check rate
 
@@ -169,6 +134,7 @@ class CompanionManager(QObject):
         self.status_updated.emit("Listening...")
         self.tts_engine.stop()
         self.overlay.set_voice_state(VoiceState.LISTENING)
+        QTimer.singleShot(0, self.top_bar_hud.set_listening)
         sounds.play_activate()
         self.audio_recorder.start()
 
@@ -177,6 +143,7 @@ class CompanionManager(QObject):
         logger.info("Push-to-talk released -> Processing...")
         self.status_updated.emit("Thinking...")
         self.overlay.set_voice_state(VoiceState.PROCESSING)
+        QTimer.singleShot(0, self.top_bar_hud.set_thinking)
         sounds.play_thinking()
 
         pcm_data = self.audio_recorder.stop()
@@ -184,6 +151,7 @@ class CompanionManager(QObject):
             logger.info("Voice input too brief. Returning to idle.")
             self.overlay.set_voice_state(VoiceState.IDLE)
             self.status_updated.emit("Ready")
+            QTimer.singleShot(0, self.top_bar_hud.collapse_to_bar)
             return
 
         # Run pipeline asynchronously in background thread
@@ -192,15 +160,6 @@ class CompanionManager(QObject):
             args=(pcm_data,),
             daemon=True,
         ).start()
-
-    def _on_dictation_pressed(self):
-        """Global Dictation held down: record speech for text typing."""
-        self.tts_engine.stop()
-        self.dictation_mgr.start_dictation()
-
-    def _on_dictation_released(self):
-        """Global Dictation released: transcribe and insert text into active app."""
-        self.dictation_mgr.stop_dictation_and_insert()
 
     def _run_inference_pipeline(self, pcm_data: bytes):
         with self._processing_lock:
@@ -233,6 +192,7 @@ class CompanionManager(QObject):
                     logger.info("Empty transcript. Resetting.")
                     self.overlay.set_voice_state(VoiceState.IDLE)
                     self.status_updated.emit("Ready")
+                    QTimer.singleShot(0, self.top_bar_hud.collapse_to_bar)
                     return
 
                 # 4. Query Multimodal AI Vision (Gemini / Groq / Grok) with Active Context
@@ -243,11 +203,11 @@ class CompanionManager(QObject):
                 )
                 logger.info(f"Athena AI replied: '{ai_response.spoken_text}'")
 
-                # Show Floating History HUD Card if enabled
-                if self.config.get("floating_card_enabled", True):
+                # Show Top-Center Black Glass HUD response
+                if self.config.get("top_bar_hud_enabled", True) or self.config.get("floating_card_enabled", True):
                     QTimer.singleShot(
                         0,
-                        lambda: self.history_hud.show_response(ai_response.spoken_text, transcript)
+                        lambda: self.top_bar_hud.show_response(ai_response.spoken_text, transcript)
                     )
 
                 # 5. Map element pointing coordinates to global screen points

@@ -1,8 +1,8 @@
 """Automated Test Suite for Athena Everyday Power Pack Features:
-1. Sound Effects & Modern Chimes Engine (Activate, Thinking, Arrival Ding, Dictation)
+1. Sound Effects & Modern Chimes Engine (Activate, Thinking, Arrival Ding)
 2. Active Window & Deep Context Inspector (Foreground Window, Process name, Selected text)
-3. Floating Answer & History HUD Overlay (Translucent card, 1-click Copy, Auto-fade hover pause)
-4. Global Voice Dictation Mode (Hotkeys, Audio capture, Clipboard injection)
+3. Top-Center Black Glass Dynamic Bar HUD (2-3 mm Bar, Expansion, 1-click Copy, Hover pause)
+4. Unified Ctrl+Alt Hotkey and Top Bar Configuration
 5. Multimodal Vision Context Integration
 """
 
@@ -25,16 +25,16 @@ if hasattr(sys.stdout, "reconfigure"):
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from PyQt5.QtWidgets import QApplication
-from PyQt5.QtCore import QTimer
+from PyQt5.QtCore import QTimer, QEvent
 
 # Initialize Qt Application if not already running
 app = QApplication.instance() or QApplication(sys.argv)
 
 from athena.sound_effects import SoundEffectsEngine, sounds
 from athena.context_inspector import ContextInspector, WindowContext, inspector
-from athena.floating_history_overlay import FloatingHistoryCard
-from athena.dictation_manager import DictationManager
+from athena.top_bar_hud import TopBarGlassHUD, TopBarState
 from athena.ai_vision_client import AIVisionClient, PointingTarget
+from athena.config import load_config, DEFAULT_CONFIG
 
 
 class TestEverydayPowerFeatures(unittest.TestCase):
@@ -42,7 +42,7 @@ class TestEverydayPowerFeatures(unittest.TestCase):
     def test_01_sound_effects_waveforms(self):
         """Verify pre-rendered waveforms are valid PCM 16-bit WAV audio."""
         engine = SoundEffectsEngine.get_instance()
-        expected_sounds = ["activate", "thinking", "arrival", "dictation_start", "dictation_stop"]
+        expected_sounds = ["activate", "thinking", "arrival"]
 
         for sound_name in expected_sounds:
             self.assertIn(sound_name, engine._cache, f"Missing cached sound: {sound_name}")
@@ -62,8 +62,6 @@ class TestEverydayPowerFeatures(unittest.TestCase):
         engine.play_activate()
         engine.play_thinking()
         engine.play_arrival()
-        engine.play_dictation_start()
-        engine.play_dictation_stop()
         print("[PASS] Test 1 Passed: Sound Effects Waveforms are valid and playable.")
 
     def test_02_context_inspector_formatting(self):
@@ -97,57 +95,62 @@ class TestEverydayPowerFeatures(unittest.TestCase):
             print("[INFO] Headless/Session 0 detected: Windows clipboard window station requires interactive desktop session.")
         print("[PASS] Test 3 Passed: Clipboard snapshot and restoration operates cleanly.")
 
-    def test_04_floating_history_overlay(self):
-        """Verify Floating History Card displays response, calculates size, and copies text."""
-        card = FloatingHistoryCard()
-        test_answer = "You can center a div in CSS using display: flex; justify-content: center; align-items: center;"
-        test_query = "How to center a div?"
+    def test_04_top_bar_glass_hud_states_and_geometry(self):
+        """Verify Top-Center Glass HUD: 2-3 mm bar, geometry, expansion, copy, and hover."""
+        hud = TopBarGlassHUD()
 
-        card.show_response(test_answer, test_query)
-
-        self.assertEqual(card.response_label.text(), test_answer)
-        self.assertIn("How to center a div?", card.query_label.text())
-        self.assertTrue(card.isVisible())
-
-        # Test Copy button
-        card._copy_to_clipboard()
-        self.assertEqual(card.btn_copy.text(), "✓ Copied!")
-
-        # Test hover pause
-        from PyQt5.QtCore import QEvent
-        card.enterEvent(QEvent(QEvent.Enter))
-        self.assertFalse(card._fade_timer.isActive())
-        self.assertEqual(card.hint_label.text(), "paused while hovered")
-
-        # Test hover leave resumes
-        card.leaveEvent(QEvent(QEvent.Leave))
-        self.assertTrue(card._fade_timer.isActive())
-
-        card.hide_card()
-        self.assertFalse(card.isVisible())
-        print("[PASS] Test 4 Passed: Floating History Card UI, Copy, and Hover Pause operate smoothly.")
-
-    def test_05_dictation_hud(self):
-        """Verify Dictation Status HUD displays states correctly."""
-        class MockSTT:
-            def transcribe_pcm(self, pcm):
-                return "hello athena dictation test"
-
-        mgr = DictationManager(stt_engine=MockSTT())
-        hud = mgr.hud
-
-        hud.show_state("🎙️", "Listening...", "#38BDF8")
-        self.assertEqual(hud.icon_label.text(), "🎙️")
-        self.assertEqual(hud.text_label.text(), "Listening...")
+        # 1. Collapsed state check
+        hud.collapse_to_bar(animated=False)
+        self.assertEqual(hud.current_state, TopBarState.COLLAPSED)
+        self.assertEqual(hud.height(), 10)  # ~2.5 mm on standard displays
+        self.assertEqual(hud.y(), 0)       # Anchored to top edge
         self.assertTrue(hud.isVisible())
 
-        hud.show_state("✓", "Typed!", "#10B981")
-        self.assertEqual(hud.icon_label.text(), "✓")
-        self.assertEqual(hud.text_label.text(), "Typed!")
+        # 2. Listening state check
+        hud.set_listening()
+        self.assertEqual(hud.current_state, TopBarState.LISTENING)
+        self.assertEqual(hud.status_text.text(), "Listening...")
 
-        hud.hide()
-        self.assertFalse(hud.isVisible())
-        print("[PASS] Test 5 Passed: Dictation HUD transitions and displays smoothly.")
+        # 3. Thinking state check
+        hud.set_thinking()
+        self.assertEqual(hud.current_state, TopBarState.THINKING)
+        self.assertEqual(hud.status_text.text(), "Thinking...")
+
+        # 4. Expanded state check with query and answer
+        test_answer = "You can center a div in CSS using display: flex; justify-content: center; align-items: center;"
+        test_query = "How to center a div?"
+        hud.show_response(test_answer, test_query)
+
+        self.assertEqual(hud.current_state, TopBarState.EXPANDED)
+        self.assertEqual(hud.response_label.text(), test_answer)
+        self.assertIn(test_query, hud.query_label.text())
+        self.assertTrue(hud.content_widget.isVisible())
+
+        # 5. Copy answer check
+        hud._copy_answer_to_clipboard()
+        self.assertEqual(hud.btn_copy.text(), "✓ Copied!")
+
+        # 6. Hover pause check
+        hud.enterEvent(QEvent(QEvent.Enter))
+        self.assertFalse(hud._collapse_timer.isActive())
+
+        # 7. Hover leave resume check
+        hud.leaveEvent(QEvent(QEvent.Leave))
+        self.assertTrue(hud._collapse_timer.isActive())
+
+        # 8. Collapse back to 10px bar
+        hud.collapse_to_bar(animated=False)
+        self.assertEqual(hud.current_state, TopBarState.COLLAPSED)
+        self.assertEqual(hud.height(), 10)
+        print("[PASS] Test 4 Passed: Top-Center Glass HUD (2-3 mm Bar, Expansion, Copy, Hover) operates smoothly.")
+
+    def test_05_unified_hotkey_configuration(self):
+        """Verify unified Ctrl + Alt hotkey and Top Bar HUD configuration."""
+        cfg = load_config()
+        self.assertEqual(DEFAULT_CONFIG["hotkey"], "ctrl+alt")
+        self.assertTrue(DEFAULT_CONFIG.get("top_bar_hud_enabled", False))
+        self.assertEqual(cfg.get("hotkey"), "ctrl+alt")
+        print("[PASS] Test 5 Passed: Unified Ctrl+Alt Hotkey & Top Bar HUD configuration verified.")
 
     def test_06_ai_vision_client_context_injection(self):
         """Verify AIVisionClient accepts and formats active_context into payload."""

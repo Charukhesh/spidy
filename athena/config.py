@@ -17,10 +17,10 @@ LEGACY_CLICKY_CONFIG = LEGACY_CLICKY_DIR / "config.json"
 DEFAULT_CONFIG: Dict[str, Any] = {
     "api_key": "YOUR_GEMINI_API_KEY_HERE",
     "model": "auto",
-    "hotkey": "ctrl+shift",
-    "dictation_hotkey": "ctrl+alt",
+    "hotkey": "ctrl+alt",
     "sound_effects_enabled": True,
     "context_awareness": True,
+    "top_bar_hud_enabled": True,
     "floating_card_enabled": True,
     "tts_voice": "en-US-JennyNeural",
     "tts_rate": "+0%",

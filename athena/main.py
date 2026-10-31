@@ -61,7 +61,8 @@ def main():
 
     logging.info("=" * 60)
     logging.info("Athena Everyday Desktop Companion is active!")
-    logging.info("Hold 'Ctrl + Shift' for Visual AI Assistant, or 'Ctrl + Alt' for Voice Dictation.")
+    logging.info("Hold 'Ctrl + Alt' to speak to Athena and analyze your screen.")
+    logging.info("Top-center black glass Dynamic Bar HUD is active.")
     logging.info("Click the blue triangle tray icon to open Athena Settings.")
     logging.info("=" * 60)
 

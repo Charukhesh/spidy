@@ -148,11 +148,11 @@ class CompanionPanel(QWidget):
         inst_layout.setContentsMargins(10, 8, 10, 8)
         inst_layout.setSpacing(6)
 
-        # Assistant Row
+        # Unified Hotkey Row
         row1 = QHBoxLayout()
-        icon1 = QLabel("👁️")
-        icon1.setStyleSheet("border: none; font-size: 13px;")
-        t1 = QLabel("Hold Ctrl + Shift: Visual Assistant")
+        icon1 = QLabel("✦")
+        icon1.setStyleSheet("color: #60a5fa; border: none; font-size: 14px; font-weight: bold;")
+        t1 = QLabel("Hold Ctrl + Alt: Athena Voice & Vision")
         t1.setFont(QFont("Segoe UI", 9, QFont.DemiBold))
         t1.setStyleSheet("color: #E2E2E8; border: none;")
         row1.addWidget(icon1)
@@ -160,17 +160,11 @@ class CompanionPanel(QWidget):
         row1.addStretch()
         inst_layout.addLayout(row1)
 
-        # Dictation Row
-        row2 = QHBoxLayout()
-        icon2 = QLabel("🎙️")
-        icon2.setStyleSheet("border: none; font-size: 13px;")
-        t2 = QLabel("Hold Ctrl + Alt: Voice Dictation")
-        t2.setFont(QFont("Segoe UI", 9, QFont.DemiBold))
-        t2.setStyleSheet("color: #38BDF8; border: none;")
-        row2.addWidget(icon2)
-        row2.addWidget(t2)
-        row2.addStretch()
-        inst_layout.addLayout(row2)
+        hint = QLabel("Release to get spoken reply & see answer in the top-center glass bar")
+        hint.setFont(QFont("Segoe UI", 8))
+        hint.setStyleSheet("color: #8E8E98; border: none;")
+        hint.setWordWrap(True)
+        inst_layout.addWidget(hint)
 
         layout.addWidget(instruction_box)
 
@@ -326,8 +320,8 @@ class CompanionPanel(QWidget):
         self.chk_context.setStyleSheet(self._checkbox_style())
         self.chk_context.toggled.connect(self._on_toggle_context)
 
-        self.chk_hud = QCheckBox("💬 Floating Answer HUD Card")
-        self.chk_hud.setChecked(self.config.get("floating_card_enabled", True))
+        self.chk_hud = QCheckBox("💬 Top-Center Glass Dynamic HUD Bar")
+        self.chk_hud.setChecked(self.config.get("top_bar_hud_enabled", True) and self.config.get("floating_card_enabled", True))
         self.chk_hud.setStyleSheet(self._checkbox_style())
         self.chk_hud.toggled.connect(self._on_toggle_hud)
 
@@ -460,6 +454,7 @@ class CompanionPanel(QWidget):
     def _on_toggle_hud(self, checked: bool):
         cfg = load_config()
         cfg["floating_card_enabled"] = checked
+        cfg["top_bar_hud_enabled"] = checked
         save_config(cfg)
 
     def _test_sound_cues(self):
