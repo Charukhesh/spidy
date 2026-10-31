@@ -230,10 +230,10 @@ class CompanionManager(QObject):
         target_x = primary_geom.left() + primary_geom.width() // 2
         target_y = primary_geom.top() + primary_geom.height() // 3
 
-        self.overlay.point_to(target_x, target_y, "hey! i'm clicky")
+        self.overlay.point_to(target_x, target_y, "hey! i'm athena")
         self.overlay.set_voice_state(VoiceState.RESPONDING)
 
-        welcome_text = "hey! i'm clicky. hold control plus shift anytime and talk to me while looking at your screen."
+        welcome_text = "hey! i'm athena. hold control plus shift anytime and talk to me while looking at your screen."
 
         def on_done():
             self.overlay.start_flying_back()
