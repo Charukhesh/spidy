@@ -65,6 +65,7 @@ class NavigationMode(Enum):
     NAVIGATING_TO_TARGET = "navigating"
     POINTING_AT_TARGET = "pointing"
     RETURNING_TO_CURSOR = "returning"
+    TRACING_CURVE = "tracing_curve"
 
 
 class OverlaySignals(QObject):
@@ -74,6 +75,9 @@ class OverlaySignals(QObject):
     speech_bubble_text = pyqtSignal(str)
     draw_visuals = pyqtSignal(list)
     clear_visuals = pyqtSignal()
+    trace_curve = pyqtSignal(list, str)
+    fade_curve = pyqtSignal()
+    clear_curve = pyqtSignal()
 
 
 class ClickyCursorOverlay(QWidget):
@@ -89,6 +93,19 @@ class ClickyCursorOverlay(QWidget):
         self.signals.speech_bubble_text.connect(self._set_speech_bubble)
         self.signals.draw_visuals.connect(self._on_draw_visuals)
         self.signals.clear_visuals.connect(self._on_clear_visuals)
+        self.signals.trace_curve.connect(self._on_trace_curve)
+        self.signals.fade_curve.connect(self._on_fade_curve)
+        self.signals.clear_curve.connect(self._on_clear_curve)
+
+        # Dynamic Curve Tracing State
+        self.curve_points: List[QPointF] = []
+        self.curve_trail_points: List[QPointF] = []
+        self.curve_center: QPointF = QPointF(0.0, 0.0)
+        self.curve_label: str = ""
+        self.curve_duration_ms: int = 1800
+        self.curve_elapsed_ms: int = 0
+        self.curve_opacity: float = 1.0
+        self.curve_is_fading: bool = False
 
         # State tracking
         self.voice_state = VoiceState.IDLE
@@ -234,6 +251,49 @@ class ClickyCursorOverlay(QWidget):
         self.bubble_text = ""
         self.bubble_opacity = 0.0
 
+    def start_tracing_curve(self, points: list, label: str = ""):
+        """Start drawing curve with cursor gliding in real-time along the path."""
+        self.signals.trace_curve.emit(points, label)
+
+    def start_fading_curve(self):
+        """Begin graceful fade out of the drawn curve."""
+        self.signals.fade_curve.emit()
+
+    def clear_curve(self):
+        """Immediately clear drawn curve."""
+        self.signals.clear_curve.emit()
+
+    def _on_trace_curve(self, points: list, label: str):
+        if not points:
+            return
+        self.curve_points = [QPointF(float(p[0]), float(p[1])) for p in points]
+        self.curve_trail_points = [self.curve_points[0]]
+        self.curve_label = label
+        self.curve_elapsed_ms = 0
+        self.curve_opacity = 1.0
+        self.curve_is_fading = False
+
+        xs = [p.x() for p in self.curve_points]
+        ys = [p.y() for p in self.curve_points]
+        self.curve_center = QPointF(sum(xs) / len(xs), sum(ys) / len(ys))
+
+        self.current_global_pos = self.curve_points[0]
+        self.nav_mode = NavigationMode.TRACING_CURVE
+        self.bubble_text = ""
+        self.bubble_opacity = 0.0
+        self.update()
+
+    def _on_fade_curve(self):
+        self.curve_is_fading = True
+        self.update()
+
+    def _on_clear_curve(self):
+        self.curve_points = []
+        self.curve_trail_points = []
+        self.curve_opacity = 0.0
+        self.curve_is_fading = False
+        self.update()
+
     def start_flying_back(self):
         """Fly back to mouse cursor."""
         cursor_pt = QCursor.pos()
@@ -328,6 +388,48 @@ class ClickyCursorOverlay(QWidget):
             if self.bubble_scale < 1.0:
                 self.bubble_scale = min(1.0, self.bubble_scale + 0.08)
 
+        elif self.nav_mode == NavigationMode.TRACING_CURVE:
+            self.curve_elapsed_ms += 16
+            t = min(1.0, self.curve_elapsed_ms / max(1, self.curve_duration_ms))
+            # Smooth ease-in-out cosine easing
+            ease_t = 0.5 - 0.5 * math.cos(t * math.pi)
+
+            if len(self.curve_points) >= 2:
+                total_segs = len(self.curve_points) - 1
+                float_idx = ease_t * total_segs
+                base_idx = min(int(float_idx), total_segs - 1)
+                frac = float_idx - base_idx
+
+                p_a = self.curve_points[base_idx]
+                p_b = self.curve_points[base_idx + 1]
+
+                curr_x = p_a.x() + frac * (p_b.x() - p_a.x())
+                curr_y = p_a.y() + frac * (p_b.y() - p_a.y())
+                new_pt = QPointF(curr_x, curr_y)
+
+                dx = p_b.x() - p_a.x()
+                dy = p_b.y() - p_a.y()
+                angle_deg = math.degrees(math.atan2(dy, dx)) + 90.0
+
+                self.current_global_pos = new_pt
+                self.triangle_rotation = angle_deg
+                self.curve_trail_points.append(new_pt)
+
+            if t >= 1.0:
+                self.nav_mode = NavigationMode.POINTING_AT_TARGET
+                self.triangle_rotation = 0.0
+                self.bubble_text = self.curve_label or "curve"
+                self.bubble_scale = 0.5
+                self.bubble_opacity = 1.0
+                sounds.play_arrival()
+
+        if self.curve_is_fading:
+            self.curve_opacity = max(0.0, self.curve_opacity - 0.015)
+            if self.curve_opacity <= 0.0:
+                self.curve_trail_points = []
+                self.curve_points = []
+                self.curve_is_fading = False
+
         # Spinner rotation increment
         if self.voice_state == VoiceState.PROCESSING:
             self.spinner_angle = (self.spinner_angle + 12.0) % 360.0
@@ -341,7 +443,11 @@ class ClickyCursorOverlay(QWidget):
         painter.setRenderHint(QPainter.Antialiasing, True)
         painter.setRenderHint(QPainter.SmoothPixmapTransform, True)
 
-        # 0. Render Active Visual Drawings (Bounding Boxes, Circles, Arrows, Simulations, Notes)
+        # 0. Render Active Curve Trail (Neon glow polyline)
+        if self.curve_trail_points and self.curve_opacity > 0.0:
+            self._render_curve_trail(painter)
+
+        # 0.5. Render Active Visual Drawings (Bounding Boxes, Circles, Arrows, Simulations, Notes)
         if self.active_drawings:
             self._render_active_drawings(painter)
 
@@ -369,6 +475,55 @@ class ClickyCursorOverlay(QWidget):
             self._draw_speech_bubble(painter, lx, ly)
 
     # MARK: - Visual Drawing Renderers
+
+    def _render_curve_trail(self, painter: QPainter):
+        """Render high-voltage neon glow polyline for curve tracing."""
+        if len(self.curve_trail_points) < 2:
+            return
+
+        painter.save()
+
+        # Subtle coordinate axes centered at self.curve_center
+        if self.curve_center and self.curve_opacity > 0.2:
+            cc = self.mapFromGlobal(QPoint(int(self.curve_center.x()), int(self.curve_center.y())))
+            axis_len = 150.0
+            axis_pen = QPen(QColor(255, 255, 255, int(35 * self.curve_opacity)), 1, Qt.DashLine)
+            painter.setPen(axis_pen)
+            painter.drawLine(int(cc.x() - axis_len), cc.y(), int(cc.x() + axis_len), cc.y())
+            painter.drawLine(cc.x(), int(cc.y() - 90), cc.x(), int(cc.y() + 90))
+
+        # Build QPainterPath for smooth curve
+        path = QPainterPath()
+        p0 = self.mapFromGlobal(QPoint(int(self.curve_trail_points[0].x()), int(self.curve_trail_points[0].y())))
+        path.moveTo(QPointF(p0.x(), p0.y()))
+        for pt in self.curve_trail_points[1:]:
+            l_pt = self.mapFromGlobal(QPoint(int(pt.x()), int(pt.y())))
+            path.lineTo(QPointF(l_pt.x(), l_pt.y()))
+
+        # Layer 1: Wide electric blue outer glow
+        glow_alpha = int(75 * self.curve_opacity)
+        painter.setPen(QPen(QColor(51, 128, 255, glow_alpha), 9, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+        painter.setBrush(Qt.NoBrush)
+        painter.drawPath(path)
+
+        # Layer 2: Neon Cyan mid glow
+        cyan_alpha = int(180 * self.curve_opacity)
+        painter.setPen(QPen(QColor(96, 165, 250, cyan_alpha), 4.5, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+        painter.drawPath(path)
+
+        # Layer 3: White-hot core beam
+        beam_alpha = int(240 * self.curve_opacity)
+        painter.setPen(QPen(QColor(255, 255, 255, beam_alpha), 2.0, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+        painter.drawPath(path)
+
+        # Pulse ring at cursor position if tracing
+        if self.nav_mode == NavigationMode.TRACING_CURVE:
+            head = self.mapFromGlobal(QPoint(int(self.current_global_pos.x()), int(self.current_global_pos.y())))
+            painter.setPen(QPen(QColor(96, 165, 250, 160), 2))
+            painter.setBrush(QBrush(QColor(51, 128, 255, 60)))
+            painter.drawEllipse(head, 8, 8)
+
+        painter.restore()
 
     def _render_active_drawings(self, painter: QPainter):
         """Render all on-screen drawings (boxes, circles, arrows, simulations, notes)."""

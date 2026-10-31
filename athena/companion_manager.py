@@ -34,6 +34,8 @@ from athena.cursor_overlay import ClickyCursorOverlay, VoiceState
 from athena.sound_effects import sounds
 from athena.context_inspector import inspector
 from athena.top_bar_hud import TopBarGlassHUD
+from athena.curve_generator import CurveGenerator
+from athena.web_search import web_search
 
 logger = logging.getLogger("athena.companion")
 
@@ -92,6 +94,7 @@ class CompanionManager(QObject):
         self.is_hotkey_down = False
         self._processing_lock = threading.Lock()
         self._stop_hotkey_thread = threading.Event()
+        self.pending_search_query: Optional[str] = None
 
         # Start hardware hotkey polling thread (Ctrl + Alt)
         self._start_hotkey_listener()
@@ -148,6 +151,7 @@ class CompanionManager(QObject):
         self.status_updated.emit("Listening...")
         self.tts_engine.stop()
         self.overlay.set_voice_state(VoiceState.LISTENING)
+        self.overlay.clear_curve()
         self.sig_clear_drawings.emit()
         self.sig_set_listening.emit()
         sounds.play_activate()
@@ -181,8 +185,8 @@ class CompanionManager(QObject):
         """Strip all technical tags and brackets to guarantee zero tags are ever spoken aloud."""
         if not text:
             return ""
-        # Remove [POINT:...], [DRAW:...], [SIMULATE:...], [WRITE:...], [HEARD:...], etc.
-        cleaned = re.sub(r"\[(?:POINT|DRAW|SIMULATE|WRITE|HEARD)[^\]]*\]", "", text, flags=re.IGNORECASE)
+        # Remove [POINT:...], [DRAW:...], [SIMULATE:...], [WRITE:...], [HEARD:...], [TRACE:...], [OFFER_SEARCH:...], etc.
+        cleaned = re.sub(r"\[(?:POINT|DRAW|SIMULATE|WRITE|HEARD|TRACE|OFFER_SEARCH)[^\]]*\]", "", text, flags=re.IGNORECASE)
         # Strip any other bracketed expressions like [POINT:none] or stray brackets
         cleaned = re.sub(r"\[[^\]]*\]", "", cleaned)
         # Clean up any leftover whitespace
@@ -221,6 +225,12 @@ class CompanionManager(QObject):
 
                 wav_bytes = AudioRecorder.pcm_to_wav_bytes(pcm_data) if use_direct_audio else None
 
+                # Inject pending search notice into context if active
+                search_notice = None
+                if self.pending_search_query:
+                    search_notice = f"Pending web verification topic: '{self.pending_search_query}'. If user affirms (yes/please/sure/go ahead), acknowledge and synthesize web findings."
+                    active_context_str = f"{active_context_str}\n{search_notice}" if active_context_str else search_notice
+
                 # 2. Query Multimodal AI Vision (Gemini Direct Audio / Groq / Grok) with Active Context
                 ai_response = self.ai_client.query(
                     transcript=transcript,
@@ -232,6 +242,49 @@ class CompanionManager(QObject):
 
                 # Determine prompt text to display in Top-Center Glass HUD
                 display_query = (ai_response.heard_prompt or transcript or "Voice Request").strip()
+                user_heard = display_query.lower()
+
+                # 2.1 Handle Web Search Confirmation or Direct Search Trigger
+                if self.pending_search_query and any(w in user_heard for w in ("yes", "yeah", "yep", "sure", "please", "go ahead", "search it", "do it", "check it", "okay", "ok")):
+                    query_to_search = self.pending_search_query
+                    self.pending_search_query = None
+                    logger.info(f"User confirmed web search for: '{query_to_search}'")
+                    # Open browser in background
+                    web_search.open_in_browser(query_to_search)
+                    # Retrieve verified search snippets
+                    snippets = web_search.search(query_to_search, max_results=4)
+                    if snippets:
+                        search_prompt = (
+                            f"The user confirmed web verification for: '{query_to_search}'. "
+                            f"Here are the live verified search snippets from Google/web:\n"
+                            f"{web_search.format_for_prompt(snippets)}\n"
+                            f"Synthesize the verified answer warmly, concisely, and naturally for the user as a sharp collaborative peer."
+                        )
+                        ai_response = self.ai_client.query(transcript=search_prompt, screen_captures=screen_captures)
+                        logger.info(f"Synthesized web verification reply: '{ai_response.spoken_text}'")
+                elif any(kw in user_heard for kw in ("search the web for", "search for", "google ")) and len(user_heard) > 10:
+                    raw_q = re.sub(r"^(?:please\s+)?(?:search the web for|search for|google)\s+", "", user_heard, flags=re.IGNORECASE).strip()
+                    if raw_q:
+                        logger.info(f"Direct search request detected: '{raw_q}'")
+                        web_search.open_in_browser(raw_q)
+                        snippets = web_search.search(raw_q, max_results=4)
+                        if snippets:
+                            search_prompt = (
+                                f"The user asked to search the web for: '{raw_q}'. "
+                                f"Here are the live verified search results:\n"
+                                f"{web_search.format_for_prompt(snippets)}\n"
+                                f"Synthesize these live findings warmly and concisely for the user as a sharp peer."
+                            )
+                            ai_response = self.ai_client.query(transcript=search_prompt, screen_captures=screen_captures)
+                else:
+                    # Reset pending query if a non-affirmative question was asked
+                    if self.pending_search_query and not any(w in user_heard for w in ("yes", "sure", "ok", "go ahead")):
+                        self.pending_search_query = None
+
+                # Register new search offer if LLM offered one
+                if ai_response.offer_search:
+                    self.pending_search_query = ai_response.offer_search
+                    logger.info(f"Athena offered web search: '{self.pending_search_query}'")
 
                 # Clean speech text to guarantee zero tags are read aloud
                 sanitized_speech = self._sanitize_speech_text(ai_response.spoken_text)
@@ -239,6 +292,25 @@ class CompanionManager(QObject):
                 # Show Top-Center Black Glass HUD response with copy button!
                 if self.config.get("top_bar_hud_enabled", True) or self.config.get("floating_card_enabled", True):
                     self.sig_show_response.emit(sanitized_speech, display_query)
+
+                # 2.5 Animated Curve Tracing around User Mouse Cursor
+                if ai_response.trace_curve:
+                    c_type = ai_response.trace_curve.curve_type
+                    c_lbl = ai_response.trace_curve.label
+                    from PyQt5.QtGui import QCursor
+                    m_pos = QCursor.pos()
+                    curve_pts = CurveGenerator.generate_curve(c_type, float(m_pos.x()), float(m_pos.y()))
+                    logger.info(f"Tracing {c_type} curve ({len(curve_pts)} pts) centered at mouse ({m_pos.x()}, {m_pos.y()})")
+                    self.overlay.start_tracing_curve(curve_pts, c_lbl)
+                else:
+                    # Fallback curve detection from prompt text (e.g. 'how does a cubic curve look like')
+                    detected_curve = CurveGenerator.parse_curve_identifier(display_query)
+                    if detected_curve and any(w in display_query.lower() for w in ("look like", "draw", "show me", "plot")):
+                        from PyQt5.QtGui import QCursor
+                        m_pos = QCursor.pos()
+                        curve_pts = CurveGenerator.generate_curve(detected_curve, float(m_pos.x()), float(m_pos.y()))
+                        logger.info(f"Fallback detected curve: '{detected_curve}' centered at mouse ({m_pos.x()}, {m_pos.y()})")
+                        self.overlay.start_tracing_curve(curve_pts, f"{detected_curve} curve")
 
                 # 3. Visual Drawings & Simulations (Bounding boxes, circles, arrows, simulations, notes)
                 if ai_response.drawings and screen_captures:
@@ -270,6 +342,8 @@ class CompanionManager(QObject):
                         # Fly back if pointing
                         if self.overlay.nav_mode.value == "pointing":
                             self.overlay.start_flying_back()
+                        # Fade out drawn curve smoothly
+                        self.overlay.start_fading_curve()
                         self.overlay.set_voice_state(VoiceState.IDLE)
                         self.status_updated.emit("Ready")
                         # Once the agent finishes giving the response, smoothly collapse back to the thin idle bar

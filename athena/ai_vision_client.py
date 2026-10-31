@@ -44,13 +44,27 @@ you have a small glowing triangle cursor and visual overlay engine. use them whe
    - Directional guide arrow: [DRAW:arrow,startX,startY,targetX,targetY:label]
    - Workflow step simulation: [SIMULATE:x1,y1->x2,y2(->x3,y3...):workflow title]
    - On-screen note: [WRITE:x,y:note text]
-3. Coordinates are in 0..1000 normalized space ((0,0) top-left, (1000,1000) bottom-right).
-4. If no pointing or drawing is needed, append [POINT:none].
+3. Mathematical Curves & Visual Tracing:
+   - Whenever the user asks how a curve, mathematical function, or visual shape looks like (e.g. "how does a cubic curve look like", "draw a parabola", "show a sine wave", "draw a bell curve", "draw a spiral", "draw a heart"):
+     Instruct your cursor to trace it right over their screen around their mouse cursor using [TRACE:type:label].
+     Valid curve types: cubic, parabola, sine, bell, spiral, circle, heart, exponential.
+     Example: [TRACE:cubic:cubic curve y=x³]
+4. Coordinates are in 0..1000 normalized space ((0,0) top-left, (1000,1000) bottom-right).
+5. If no pointing or drawing is needed, append [POINT:none].
+
+web search verification:
+- if the user asks any question that requires external fact-checking, live web verification, recent sports scores, real-time news, or pricing:
+  answer with your best immediate intuition and conversationally ask: "want me to check the web for that?".
+  append: [OFFER_SEARCH: <concise search query>].
+  example:
+  [HEARD: who won the match yesterday]
+  it looks like the match was played yesterday evening, but let me check the final score. want me to check the web for that? [OFFER_SEARCH: match score yesterday] [POINT:none]
 
 response structure:
 [HEARD: <the exact words the user asked>]
 <your warm, direct, natural conversational reply>
-[POINT:x,y:label] (or visual draw tag, or [POINT:none])
+[TRACE:type:label] OR [POINT:x,y:label] (or visual draw tag, or [POINT:none])
+[OFFER_SEARCH:query] (only if web verification is offered)
 
 examples:
 - user asks about cooking oats on screen:
@@ -87,12 +101,20 @@ class VisualDrawing:
 
 
 @dataclass
+class TraceCurveTarget:
+    curve_type: str  # "cubic", "parabola", "sine", "bell", "spiral", "circle", "heart", "exponential"
+    label: str
+
+
+@dataclass
 class AIVisionResponse:
     full_text: str
     spoken_text: str
     point_target: Optional[PointingTarget] = None
     drawings: List[VisualDrawing] = field(default_factory=list)
     heard_prompt: str = ""
+    trace_curve: Optional[TraceCurveTarget] = None
+    offer_search: str = ""
 
 
 # Backward compatibility alias
@@ -273,8 +295,8 @@ class AIVisionClient:
             data = response.json()
             raw_reply = data["choices"][0]["message"].get("content", "")
 
-            # Parse pointing coordinates, visual drawings, and heard prompt
-            spoken_text, point_target, drawings, heard_prompt = self.parse_visual_tags(raw_reply)
+            # Parse pointing coordinates, visual drawings, heard prompt, curve tracing, and web search offer
+            spoken_text, point_target, drawings, heard_prompt, trace_curve, offer_search = self.parse_visual_tags(raw_reply)
 
             # Map normalized [0..1000] coordinates to screenshot pixel resolution
             point_target, drawings = self._scale_to_capture_pixels(point_target, drawings, screen_captures)
@@ -291,6 +313,8 @@ class AIVisionClient:
                 point_target=point_target,
                 drawings=drawings,
                 heard_prompt=heard_prompt,
+                trace_curve=trace_curve,
+                offer_search=offer_search,
             )
 
         except httpx.HTTPStatusError as e:
@@ -367,16 +391,20 @@ class AIVisionClient:
     @classmethod
     def parse_pointing_coordinates(cls, response_text: str) -> Tuple[str, Optional[PointingTarget]]:
         """Backward-compatible pointing coordinate parser."""
-        spoken, target, _, _ = cls.parse_visual_tags(response_text)
-        return spoken, target
+        res = cls.parse_visual_tags(response_text)
+        return res[0], res[1]
 
     @staticmethod
-    def parse_visual_tags(response_text: str) -> Tuple[str, Optional[PointingTarget], List[VisualDrawing], str]:
-        """Parse [HEARD:...], [POINT:...], [DRAW:...], [SIMULATE:...], and [WRITE:...] tags."""
+    def parse_visual_tags(
+        response_text: str,
+    ) -> Tuple[str, Optional[PointingTarget], List[VisualDrawing], str, Optional[TraceCurveTarget], str]:
+        """Parse [HEARD:...], [POINT:...], [DRAW:...], [SIMULATE:...], [WRITE:...], [TRACE:...], and [OFFER_SEARCH:...]."""
         spoken = response_text
         point_target: Optional[PointingTarget] = None
         drawings: List[VisualDrawing] = []
         heard_prompt = ""
+        trace_curve: Optional[TraceCurveTarget] = None
+        offer_search = ""
 
         # 0. Parse [HEARD: <exact words>]
         heard_pattern = re.compile(r"\[HEARD:\s*([^\]]+)\]", re.IGNORECASE)
@@ -466,12 +494,36 @@ class AIVisionClient:
             drawings.append(VisualDrawing(kind="text", coords=[x, y], label=txt, screen_number=s_num))
         spoken = write_pattern.sub("", spoken)
 
+        # 7. Parse [TRACE:type:label]
+        trace_pattern = re.compile(
+            r"\[TRACE:\s*([a-zA-Z0-9_\^\-]+)\s*[,:]\s*([^\]]+)\]",
+            re.IGNORECASE,
+        )
+        match_trace = trace_pattern.search(spoken)
+        if match_trace:
+            c_type = match_trace.group(1).strip()
+            c_label = match_trace.group(2).strip()
+            trace_curve = TraceCurveTarget(curve_type=c_type, label=c_label)
+            spoken = trace_pattern.sub("", spoken)
+
+        # 8. Parse [OFFER_SEARCH:query]
+        search_pattern = re.compile(r"\[OFFER_SEARCH:\s*([^\]]+)\]", re.IGNORECASE)
+        match_search = search_pattern.search(spoken)
+        if match_search:
+            offer_search = match_search.group(1).strip()
+            spoken = search_pattern.sub("", spoken)
+
         # Failsafe cleanup: strip any remaining bracketed tags or negative control [POINT:none]
-        spoken = re.sub(r"\[(?:POINT|DRAW|SIMULATE|WRITE|HEARD)[^\]]*\]", "", spoken, flags=re.IGNORECASE)
+        spoken = re.sub(
+            r"\[(?:POINT|DRAW|SIMULATE|WRITE|HEARD|TRACE|OFFER_SEARCH)[^\]]*\]",
+            "",
+            spoken,
+            flags=re.IGNORECASE,
+        )
         spoken = re.sub(r"\[POINT:\s*none\s*\]", "", spoken, flags=re.IGNORECASE).strip()
         spoken = re.sub(r"\s+", " ", spoken).strip()
 
-        return spoken.strip(), point_target, drawings, heard_prompt
+        return spoken.strip(), point_target, drawings, heard_prompt, trace_curve, offer_search
 
 
 # Backward compatibility alias
