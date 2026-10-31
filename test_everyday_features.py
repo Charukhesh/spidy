@@ -161,6 +161,62 @@ class TestEverydayPowerFeatures(unittest.TestCase):
         self.assertIn("gemini-3.5-flash", model)
         print("[PASS] Test 6 Passed: Vision AI client properly resolves provider and supports context.")
 
+    def test_07_visual_drawings_parser_and_overlay(self):
+        """Verify parsing of visual drawing tags (box, circle, arrow, simulate, text)."""
+        client = AIVisionClient(api_key="AQ.MOCK_KEY")
+        sample_response = (
+            "here is how you do it. "
+            "[DRAW:box,100,200,400,300:login box] "
+            "[DRAW:circle,500,500,50:target icon] "
+            "[DRAW:arrow,100,100,500,500:flow direction] "
+            "[SIMULATE:100,200->300,400->500,600:checkout steps] "
+            "[WRITE:700,800:important note] "
+            "[POINT:250,250:main button]"
+        )
+
+        spoken, target, drawings = client.parse_visual_tags(sample_response)
+
+        # Check spoken text has tags stripped
+        self.assertEqual(spoken, "here is how you do it.")
+        self.assertIsNotNone(target)
+        self.assertEqual(target.x, 250)
+        self.assertEqual(target.y, 250)
+        self.assertEqual(target.label, "main button")
+
+        # Check 5 drawings parsed
+        self.assertEqual(len(drawings), 5)
+        kinds = [d.kind for d in drawings]
+        self.assertIn("box", kinds)
+        self.assertIn("circle", kinds)
+        self.assertIn("arrow", kinds)
+        self.assertIn("simulate", kinds)
+        self.assertIn("text", kinds)
+
+        box_d = next(d for d in drawings if d.kind == "box")
+        self.assertEqual(box_d.coords, [100, 200, 400, 300])
+        self.assertEqual(box_d.label, "login box")
+
+        sim_d = next(d for d in drawings if d.kind == "simulate")
+        self.assertEqual(sim_d.coords, [100, 200, 300, 400, 500, 600])
+        self.assertEqual(sim_d.label, "checkout steps")
+        print("[PASS] Test 7 Passed: Visual drawing tags (box, circle, arrow, simulate, text) parsed cleanly.")
+
+    def test_08_thinking_to_idle_collapse(self):
+        """Verify thinking bar smoothly returns to 2-3 mm idle bar."""
+        hud = TopBarGlassHUD()
+        hud.set_thinking()
+        self.assertEqual(hud.current_state, TopBarState.THINKING)
+        self.assertTrue(hud.height() > 10)
+
+        # Collapse to idle bar
+        hud.collapse_to_bar(animated=False)
+        self.assertEqual(hud.current_state, TopBarState.COLLAPSED)
+        self.assertEqual(hud.height(), 10)
+        self.assertTrue(hud.collapsed_pill.isVisible())
+        self.assertFalse(hud.status_row.isVisible())
+        self.assertFalse(hud.content_widget.isVisible())
+        print("[PASS] Test 8 Passed: Thinking bar successfully collapses into 2-3 mm idle bar.")
+
 
 if __name__ == "__main__":
     unittest.main()

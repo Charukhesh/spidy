@@ -389,6 +389,11 @@ class TopBarGlassHUD(QWidget):
         # Start auto-collapse countdown
         self._collapse_timer.start(self._auto_collapse_delay_ms)
 
+    def schedule_collapse(self, delay_ms: int = 2500):
+        """Schedule a smooth auto-collapse after a given delay."""
+        self._collapse_timer.stop()
+        self._collapse_timer.start(delay_ms)
+
     def collapse_to_bar(self, animated: bool = True):
         """Collapse into the 2-3 mm black glass bar."""
         self._collapse_timer.stop()

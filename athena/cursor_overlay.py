@@ -7,7 +7,7 @@ Implements the complete visual companion from the original macOS HeyClicky:
 - Real-time animated audio waveform during push-to-talk listening
 - Glowing rotating spinner during AI processing
 - Bezier arc swooping flight animation with scale-up and rotation to point at UI elements
-- Navigation speech bubble pop-in with bounce
+- Visual Drawing Engine: bounding boxes, glowing circles, arrows, workflow simulations, and notes
 - Transparent click-through overlay (WS_EX_TRANSPARENT, WS_EX_LAYERED, WS_EX_NOACTIVATE)
 """
 
@@ -15,7 +15,7 @@ import math
 import ctypes
 from ctypes import wintypes
 from enum import Enum
-from typing import Optional, Tuple, Callable
+from typing import Optional, Tuple, Callable, List, Dict, Any
 
 from PyQt5.QtCore import (
     Qt,
@@ -50,6 +50,7 @@ WS_EX_NOACTIVATE = 0x08000000
 
 CLICKY_BLUE = QColor("#3380FF")
 CLICKY_BLUE_GLOW = QColor(51, 128, 255, 120)
+NEON_CYAN = QColor(96, 165, 250)
 
 
 class VoiceState(Enum):
@@ -71,10 +72,12 @@ class OverlaySignals(QObject):
     audio_level_changed = pyqtSignal(float)
     point_at_target = pyqtSignal(int, int, str)
     speech_bubble_text = pyqtSignal(str)
+    draw_visuals = pyqtSignal(list)
+    clear_visuals = pyqtSignal()
 
 
 class ClickyCursorOverlay(QWidget):
-    """Full-screen click-through transparent overlay window for Clicky."""
+    """Full-screen click-through transparent overlay window for Clicky and Athena."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -84,6 +87,8 @@ class ClickyCursorOverlay(QWidget):
         self.signals.audio_level_changed.connect(self._on_audio_level)
         self.signals.point_at_target.connect(self._start_navigation)
         self.signals.speech_bubble_text.connect(self._set_speech_bubble)
+        self.signals.draw_visuals.connect(self._on_draw_visuals)
+        self.signals.clear_visuals.connect(self._on_clear_visuals)
 
         # State tracking
         self.voice_state = VoiceState.IDLE
@@ -111,6 +116,11 @@ class ClickyCursorOverlay(QWidget):
         self.bubble_opacity = 0.0
         self.target_element_label = ""
 
+        # Visual Drawings (boxes, circles, arrows, simulations, notes)
+        # Each item: {"kind": str, "coords": [int, ...], "label": str} in global screen coordinates
+        self.active_drawings: List[Dict[str, Any]] = []
+        self.drawing_opacity: float = 1.0
+
         # Window configuration
         self.setWindowFlags(
             Qt.WindowStaysOnTopHint
@@ -132,6 +142,8 @@ class ClickyCursorOverlay(QWidget):
     def _update_geometry(self):
         """Cover entire virtual desktop across all monitors."""
         app = QApplication.instance()
+        if not app:
+            return
         virtual_rect = QRect()
         for screen in app.screens():
             virtual_rect = virtual_rect.united(screen.geometry())
@@ -168,6 +180,14 @@ class ClickyCursorOverlay(QWidget):
     def show_speech_bubble(self, text: str):
         self.signals.speech_bubble_text.emit(text)
 
+    def apply_drawings(self, drawings: list):
+        """Display visual bounding boxes, circles, arrows, or workflow simulations."""
+        self.signals.draw_visuals.emit(drawings)
+
+    def clear_drawings(self):
+        """Remove active visual drawings."""
+        self.signals.clear_visuals.emit()
+
     # MARK: - Signal Handlers
 
     def _on_state_changed(self, state: VoiceState):
@@ -182,6 +202,15 @@ class ClickyCursorOverlay(QWidget):
         self.bubble_text = text
         self.bubble_opacity = 1.0 if text else 0.0
         self.bubble_scale = 1.0
+        self.update()
+
+    def _on_draw_visuals(self, drawings: list):
+        self.active_drawings = drawings
+        self.drawing_opacity = 1.0
+        self.update()
+
+    def _on_clear_visuals(self):
+        self.active_drawings = []
         self.update()
 
     def _start_navigation(self, target_global_x: int, target_global_y: int, label: str):
@@ -312,8 +341,11 @@ class ClickyCursorOverlay(QWidget):
         painter.setRenderHint(QPainter.Antialiasing, True)
         painter.setRenderHint(QPainter.SmoothPixmapTransform, True)
 
+        # 0. Render Active Visual Drawings (Bounding Boxes, Circles, Arrows, Simulations, Notes)
+        if self.active_drawings:
+            self._render_active_drawings(painter)
+
         # Convert global screen coordinates to local widget coordinates!
-        # This completely resolves multi-monitor offsets and DPI shifts!
         local_pos = self.mapFromGlobal(
             QPoint(int(self.current_global_pos.x()), int(self.current_global_pos.y()))
         )
@@ -335,6 +367,220 @@ class ClickyCursorOverlay(QWidget):
         # 4. Speech Bubble (when pointing or answering)
         if self.bubble_opacity > 0.0 and self.bubble_text:
             self._draw_speech_bubble(painter, lx, ly)
+
+    # MARK: - Visual Drawing Renderers
+
+    def _render_active_drawings(self, painter: QPainter):
+        """Render all on-screen drawings (boxes, circles, arrows, simulations, notes)."""
+        for item in self.active_drawings:
+            kind = item.get("kind", "")
+            coords = item.get("coords", [])
+            label = item.get("label", "")
+
+            if kind == "box" and len(coords) >= 4:
+                self._draw_visual_box(painter, coords[0], coords[1], coords[2], coords[3], label)
+            elif kind == "circle" and len(coords) >= 3:
+                self._draw_visual_circle(painter, coords[0], coords[1], coords[2], label)
+            elif kind == "arrow" and len(coords) >= 4:
+                self._draw_visual_arrow(painter, coords[0], coords[1], coords[2], coords[3], label)
+            elif kind == "simulate" and len(coords) >= 4:
+                self._draw_visual_simulate(painter, coords, label)
+            elif kind == "text" and len(coords) >= 2:
+                self._draw_visual_text(painter, coords[0], coords[1], label)
+
+    def _draw_visual_box(self, painter: QPainter, gx1: int, gy1: int, gx2: int, gy2: int, label: str):
+        """Draw a sleek, glowing neon-blue rounded bounding box with label badge."""
+        p1 = self.mapFromGlobal(QPoint(min(gx1, gx2), min(gy1, gy2)))
+        p2 = self.mapFromGlobal(QPoint(max(gx1, gx2), max(gy1, gy2)))
+
+        rect = QRectF(p1.x(), p1.y(), max(10, p2.x() - p1.x()), max(10, p2.y() - p1.y()))
+
+        painter.save()
+        # Outer glow
+        glow_rect = rect.adjusted(-4, -4, 4, 4)
+        painter.setPen(QPen(QColor(51, 128, 255, 60), 6))
+        painter.setBrush(Qt.NoBrush)
+        painter.drawRoundedRect(glow_rect, 10, 10)
+
+        # Semi-translucent glass fill
+        painter.setPen(QPen(NEON_CYAN, 2.5))
+        painter.setBrush(QBrush(QColor(37, 99, 235, 35)))
+        painter.drawRoundedRect(rect, 8, 8)
+
+        # Label Pill Badge at top-left
+        if label:
+            font = QFont("Segoe UI", 9, QFont.Bold)
+            painter.setFont(font)
+            metrics = QFontMetrics(font)
+            badge_w = metrics.horizontalAdvance(label) + 14
+            badge_h = 22
+            badge_rect = QRectF(rect.x() + 4, max(0.0, rect.y() - 24), badge_w, badge_h)
+
+            painter.setPen(QPen(NEON_CYAN, 1))
+            painter.setBrush(QBrush(QColor(16, 18, 17, 230)))
+            painter.drawRoundedRect(badge_rect, 6, 6)
+
+            painter.setPen(QPen(Qt.white))
+            painter.drawText(badge_rect, Qt.AlignCenter, label)
+
+        painter.restore()
+
+    def _draw_visual_circle(self, painter: QPainter, gcx: int, gcy: int, radius: int, label: str):
+        """Draw a glowing highlight circle around a focal UI element."""
+        center = self.mapFromGlobal(QPoint(gcx, gcy))
+        r = float(max(12, radius))
+
+        painter.save()
+        # Glow ring
+        painter.setPen(QPen(QColor(51, 128, 255, 60), 6))
+        painter.setBrush(Qt.NoBrush)
+        painter.drawEllipse(center, r + 4, r + 4)
+
+        # Main Neon Ring
+        painter.setPen(QPen(NEON_CYAN, 2.5))
+        painter.setBrush(QBrush(QColor(37, 99, 235, 30)))
+        painter.drawEllipse(center, r, r)
+
+        if label:
+            font = QFont("Segoe UI", 9, QFont.Bold)
+            painter.setFont(font)
+            metrics = QFontMetrics(font)
+            badge_w = metrics.horizontalAdvance(label) + 14
+            badge_h = 22
+            badge_rect = QRectF(center.x() - badge_w / 2.0, center.y() + r + 6, badge_w, badge_h)
+
+            painter.setPen(QPen(NEON_CYAN, 1))
+            painter.setBrush(QBrush(QColor(16, 18, 17, 230)))
+            painter.drawRoundedRect(badge_rect, 6, 6)
+
+            painter.setPen(QPen(Qt.white))
+            painter.drawText(badge_rect, Qt.AlignCenter, label)
+
+        painter.restore()
+
+    def _draw_visual_arrow(self, painter: QPainter, gx1: int, gy1: int, gx2: int, gy2: int, label: str):
+        """Draw a crisp glowing directional vector guide arrow."""
+        p1 = self.mapFromGlobal(QPoint(gx1, gy1))
+        p2 = self.mapFromGlobal(QPoint(gx2, gy2))
+
+        painter.save()
+        pen = QPen(NEON_CYAN, 3)
+        pen.setCapStyle(Qt.RoundCap)
+        painter.setPen(pen)
+        painter.drawLine(p1, p2)
+
+        # Arrowhead at p2
+        angle = math.atan2(p2.y() - p1.y(), p2.x() - p1.x())
+        arrow_size = 14.0
+        p_left = QPointF(
+            p2.x() - arrow_size * math.cos(angle - math.pi / 6),
+            p2.y() - arrow_size * math.sin(angle - math.pi / 6),
+        )
+        p_right = QPointF(
+            p2.x() - arrow_size * math.cos(angle + math.pi / 6),
+            p2.y() - arrow_size * math.sin(angle + math.pi / 6),
+        )
+
+        arrow_head = QPolygonF([QPointF(p2.x(), p2.y()), p_left, p_right])
+        painter.setBrush(QBrush(NEON_CYAN))
+        painter.setPen(Qt.NoPen)
+        painter.drawPolygon(arrow_head)
+
+        if label:
+            font = QFont("Segoe UI", 9, QFont.Bold)
+            painter.setFont(font)
+            metrics = QFontMetrics(font)
+            badge_w = metrics.horizontalAdvance(label) + 14
+            badge_h = 22
+            badge_rect = QRectF(p1.x() - badge_w / 2.0, p1.y() - 26, badge_w, badge_h)
+
+            painter.setPen(QPen(NEON_CYAN, 1))
+            painter.setBrush(QBrush(QColor(16, 18, 17, 230)))
+            painter.drawRoundedRect(badge_rect, 6, 6)
+
+            painter.setPen(QPen(Qt.white))
+            painter.drawText(badge_rect, Qt.AlignCenter, label)
+
+        painter.restore()
+
+    def _draw_visual_simulate(self, painter: QPainter, coords: List[int], label: str):
+        """Draw connected workflow simulation path with numbered step badges (①, ②, ③)."""
+        nodes = []
+        for i in range(0, len(coords), 2):
+            if i + 1 < len(coords):
+                nodes.append(self.mapFromGlobal(QPoint(coords[i], coords[i + 1])))
+
+        if not nodes:
+            return
+
+        painter.save()
+
+        # Connect nodes with glowing dashed curve / lines
+        pen = QPen(NEON_CYAN, 2.5, Qt.DashLine)
+        painter.setPen(pen)
+        for i in range(len(nodes) - 1):
+            painter.drawLine(nodes[i], nodes[i + 1])
+
+        # Step badges at each node
+        step_symbols = ["①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧"]
+        font = QFont("Segoe UI", 11, QFont.Bold)
+        painter.setFont(font)
+
+        for idx, node in enumerate(nodes):
+            sym = step_symbols[idx] if idx < len(step_symbols) else str(idx + 1)
+            # Glowing node circle
+            painter.setPen(QPen(NEON_CYAN, 2))
+            painter.setBrush(QBrush(QColor(16, 18, 17, 240)))
+            painter.drawEllipse(node, 15, 15)
+
+            painter.setPen(QPen(NEON_CYAN))
+            node_rect = QRectF(node.x() - 15, node.y() - 15, 30, 30)
+            painter.drawText(node_rect, Qt.AlignCenter, sym)
+
+        # Title badge above the first node
+        if label and nodes:
+            first = nodes[0]
+            font_title = QFont("Segoe UI", 9, QFont.Bold)
+            painter.setFont(font_title)
+            metrics = QFontMetrics(font_title)
+            title_w = metrics.horizontalAdvance(label) + 16
+            title_h = 24
+            title_rect = QRectF(first.x() - title_w / 2.0, first.y() - 44, title_w, title_h)
+
+            painter.setPen(QPen(NEON_CYAN, 1))
+            painter.setBrush(QBrush(QColor(16, 18, 17, 240)))
+            painter.drawRoundedRect(title_rect, 6, 6)
+
+            painter.setPen(QPen(Qt.white))
+            painter.drawText(title_rect, Qt.AlignCenter, label)
+
+        painter.restore()
+
+    def _draw_visual_text(self, painter: QPainter, gx: int, gy: int, text: str):
+        """Draw an on-screen floating annotation card."""
+        pos = self.mapFromGlobal(QPoint(gx, gy))
+
+        painter.save()
+        font = QFont("Segoe UI", 9, QFont.Medium)
+        painter.setFont(font)
+        metrics = QFontMetrics(font)
+
+        lines = text.split("\n")
+        w = max(metrics.horizontalAdvance(line) for line in lines) + 20
+        h = len(lines) * metrics.height() + 16
+
+        card_rect = QRectF(pos.x() + 10, pos.y() + 10, w, h)
+
+        painter.setPen(QPen(NEON_CYAN, 1.2))
+        painter.setBrush(QBrush(QColor(16, 18, 17, 235)))
+        painter.drawRoundedRect(card_rect, 8, 8)
+
+        painter.setPen(QPen(Qt.white))
+        painter.drawText(card_rect.adjusted(10, 8, -10, -8), Qt.AlignLeft | Qt.AlignTop, text)
+
+        painter.restore()
+
+    # MARK: - Pointer Triangle, Waveform, Spinner, and Speech Bubble
 
     def _draw_triangle(self, painter: QPainter, x: float, y: float):
         painter.save()
@@ -383,7 +629,6 @@ class ClickyCursorOverlay(QWidget):
         painter.drawEllipse(QPointF(0, 0), 16, 16)
 
         painter.setBrush(QBrush(CLICKY_BLUE))
-        # Center bar peaks highest, sides taper
         factors = [0.45, 0.75, 1.0, 0.75, 0.45]
         min_height = 4.0
         max_height = 24.0

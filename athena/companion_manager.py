@@ -1,17 +1,14 @@
 """Central Companion Manager for Athena Everyday Desktop Companion.
 
 Orchestrates:
-- Hardware-level Push-to-Talk hotkey detection via GetAsyncKeyState for both:
-  1. Main Visual Assistant (default 'Ctrl+Shift')
-  2. Global Voice Dictation into active application (default 'Ctrl+Alt')
-- High-tech interactive audio cues (activate, thinking, pointing arrival ding, dictation)
+- Hardware-level Push-to-Talk hotkey detection via GetAsyncKeyState for unified 'Ctrl+Alt'
+- High-tech interactive audio cues (activate, thinking, pointing arrival ding)
 - Deep Context Awareness (active foreground window, app title, and selected text)
-- Floating Response & History HUD card with 1-click Copy button
+- Top-Center Black Glass Dynamic Bar HUD with 1-click Copy button and auto-collapse into idle bar
+- Visual Drawing Engine (bounding boxes, highlight circles, guide arrows, workflow simulations, notes)
 - Pure ctypes PCM audio capture with live waveform level feedback
-- Multi-monitor screenshot capture
-- Local Faster-Whisper transcription directly from memory
-- Multimodal AI reasoning via Google Gemini / Grok 2 Vision
-- Multi-monitor coordinate mapping and bezier flight pointing animations
+- Multi-monitor screenshot capture with normalized coordinate mapping
+- Multimodal AI vision reasoning via Google Gemini
 - Natural voice speech playback via Microsoft Edge Neural TTS
 """
 
@@ -21,7 +18,7 @@ import ctypes
 import threading
 import concurrent.futures
 import logging
-from typing import Optional
+from typing import Optional, List, Tuple
 
 from PyQt5.QtCore import QObject, pyqtSignal, QTimer
 from PyQt5.QtWidgets import QApplication
@@ -31,7 +28,7 @@ from athena.audio_recorder import AudioRecorder
 from athena.stt_engine import SpeechToText
 from athena.tts_engine import TextToSpeech
 from athena.screen_capture import ScreenCaptureUtility, ScreenCaptureResult
-from athena.ai_vision_client import AIVisionClient, GrokClient, PointingTarget
+from athena.ai_vision_client import AIVisionClient, GrokClient, PointingTarget, VisualDrawing
 from athena.cursor_overlay import ClickyCursorOverlay, VoiceState
 from athena.sound_effects import sounds
 from athena.context_inspector import inspector
@@ -50,6 +47,13 @@ class CompanionManager(QObject):
     """Coordinates the entire push-to-talk voice and visual interaction pipeline."""
 
     status_updated = pyqtSignal(str)
+    sig_set_listening = pyqtSignal()
+    sig_set_thinking = pyqtSignal()
+    sig_show_response = pyqtSignal(str, str)
+    sig_collapse_bar = pyqtSignal()
+    sig_schedule_collapse = pyqtSignal(int)
+    sig_apply_drawings = pyqtSignal(list)
+    sig_clear_drawings = pyqtSignal()
 
     def __init__(self, overlay: ClickyCursorOverlay, parent=None):
         super().__init__(parent)
@@ -73,6 +77,15 @@ class CompanionManager(QObject):
         # Top-Center Black Glass Dynamic Bar HUD
         self.top_bar_hud = TopBarGlassHUD()
         self.history_hud = self.top_bar_hud  # Backward compatibility alias
+
+        # Thread-safe signal connections to GUI widgets
+        self.sig_set_listening.connect(self.top_bar_hud.set_listening)
+        self.sig_set_thinking.connect(self.top_bar_hud.set_thinking)
+        self.sig_show_response.connect(self.top_bar_hud.show_response)
+        self.sig_collapse_bar.connect(self.top_bar_hud.collapse_to_bar)
+        self.sig_schedule_collapse.connect(self.top_bar_hud.schedule_collapse)
+        self.sig_apply_drawings.connect(self.overlay.apply_drawings)
+        self.sig_clear_drawings.connect(self.overlay.clear_drawings)
 
         # Pipeline state flags
         self.is_hotkey_down = False
@@ -134,16 +147,17 @@ class CompanionManager(QObject):
         self.status_updated.emit("Listening...")
         self.tts_engine.stop()
         self.overlay.set_voice_state(VoiceState.LISTENING)
-        QTimer.singleShot(0, self.top_bar_hud.set_listening)
+        self.sig_clear_drawings.emit()
+        self.sig_set_listening.emit()
         sounds.play_activate()
         self.audio_recorder.start()
 
     def _on_hotkey_released(self):
-        """Push-to-talk released: process audio, screenshot, and query Gemini/Grok."""
+        """Push-to-talk released: process audio, screenshot, and query Gemini."""
         logger.info("Push-to-talk released -> Processing...")
         self.status_updated.emit("Thinking...")
         self.overlay.set_voice_state(VoiceState.PROCESSING)
-        QTimer.singleShot(0, self.top_bar_hud.set_thinking)
+        self.sig_set_thinking.emit()
         sounds.play_thinking()
 
         pcm_data = self.audio_recorder.stop()
@@ -151,7 +165,7 @@ class CompanionManager(QObject):
             logger.info("Voice input too brief. Returning to idle.")
             self.overlay.set_voice_state(VoiceState.IDLE)
             self.status_updated.emit("Ready")
-            QTimer.singleShot(0, self.top_bar_hud.collapse_to_bar)
+            self.sig_collapse_bar.emit()
             return
 
         # Run pipeline asynchronously in background thread
@@ -192,7 +206,7 @@ class CompanionManager(QObject):
                     logger.info("Empty transcript. Resetting.")
                     self.overlay.set_voice_state(VoiceState.IDLE)
                     self.status_updated.emit("Ready")
-                    QTimer.singleShot(0, self.top_bar_hud.collapse_to_bar)
+                    self.sig_collapse_bar.emit()
                     return
 
                 # 4. Query Multimodal AI Vision (Gemini / Groq / Grok) with Active Context
@@ -203,21 +217,31 @@ class CompanionManager(QObject):
                 )
                 logger.info(f"Athena AI replied: '{ai_response.spoken_text}'")
 
-                # Show Top-Center Black Glass HUD response
+                # Show Top-Center Black Glass HUD response with copy button!
                 if self.config.get("top_bar_hud_enabled", True) or self.config.get("floating_card_enabled", True):
-                    QTimer.singleShot(
-                        0,
-                        lambda: self.top_bar_hud.show_response(ai_response.spoken_text, transcript)
-                    )
+                    self.sig_show_response.emit(ai_response.spoken_text, transcript)
 
-                # 5. Map element pointing coordinates to global screen points
+                # 5. Visual Drawings & Simulations (Bounding boxes, circles, arrows, simulations, notes)
+                if ai_response.drawings and screen_captures:
+                    mapped_drawings = []
+                    for d in ai_response.drawings:
+                        global_coords = self._map_coords_to_global_points(d.coords, d.screen_number, screen_captures)
+                        mapped_drawings.append({
+                            "kind": d.kind,
+                            "coords": global_coords,
+                            "label": d.label,
+                        })
+                    logger.info(f"Rendering {len(mapped_drawings)} visual drawing(s) on screen.")
+                    self.sig_apply_drawings.emit(mapped_drawings)
+
+                # 6. Map element pointing coordinates to global screen points & fly to element
                 if ai_response.point_target and screen_captures:
                     target = ai_response.point_target
                     global_x, global_y = self._map_target_to_global_coords(target, screen_captures)
                     logger.info(f"Pointing at ({global_x}, {global_y}) - label='{target.label}'")
                     self.overlay.point_to(global_x, global_y, target.label)
 
-                # 6. Speak response via Edge Neural TTS
+                # 7. Speak response via Edge Neural TTS
                 self.overlay.set_voice_state(VoiceState.RESPONDING)
                 self.status_updated.emit("Speaking...")
 
@@ -228,6 +252,8 @@ class CompanionManager(QObject):
                         self.overlay.start_flying_back()
                     self.overlay.set_voice_state(VoiceState.IDLE)
                     self.status_updated.emit("Ready")
+                    # Once the agent finishes giving the response, smoothly collapse back to the thin idle bar
+                    self.sig_schedule_collapse.emit(2500)
 
                 self.tts_engine.speak(ai_response.spoken_text, on_complete=on_speech_done)
 
@@ -235,39 +261,68 @@ class CompanionManager(QObject):
                 logger.error(f"Error in pipeline: {e}")
                 self.overlay.set_voice_state(VoiceState.IDLE)
                 self.status_updated.emit("Ready")
+                self.sig_collapse_bar.emit()
 
     def _map_target_to_global_coords(
         self,
         target: PointingTarget,
         captures: list[ScreenCaptureResult],
     ) -> tuple[int, int]:
-        """Convert screenshot pixel coordinates to Windows global screen points."""
-        cap = captures[0]
-        if target.screen_number and 1 <= target.screen_number <= len(captures):
-            cap = captures[target.screen_number - 1]
+        """Convert screenshot coordinate to Windows global screen points."""
+        coords = self._map_coords_to_global_points([target.x, target.y], target.screen_number, captures)
+        return coords[0], coords[1]
 
-        # Clamp
-        clamped_x = max(0, min(target.x, cap.width))
-        clamped_y = max(0, min(target.y, cap.height))
+    def _map_coords_to_global_points(
+        self,
+        coords: list[int],
+        screen_number: int,
+        captures: list[ScreenCaptureResult],
+    ) -> list[int]:
+        """Convert normalized [0..1000] or raw pixel coordinates to Windows global screen points."""
+        cap = captures[0]
+        if screen_number and 1 <= screen_number <= len(captures):
+            cap = captures[screen_number - 1]
 
         # Look up matching screen geometry
         app = QApplication.instance()
-        screens = app.screens()
-        matching_screen = screens[0]
-        for s in screens:
-            geom = s.geometry()
-            if geom.left() == cap.left and geom.top() == cap.top:
-                matching_screen = s
-                break
+        screens = app.screens() if app else []
+        matching_screen = screens[0] if screens else None
+        if screens:
+            for s in screens:
+                geom = s.geometry()
+                if geom.left() == cap.left and geom.top() == cap.top:
+                    matching_screen = s
+                    break
 
-        geom = matching_screen.geometry()
-        # Scale screenshot pixels to screen points
-        scale_x = geom.width() / float(cap.width) if cap.width > 0 else 1.0
-        scale_y = geom.height() / float(cap.height) if cap.height > 0 else 1.0
+        if matching_screen:
+            geom = matching_screen.geometry()
+            geom_left = geom.left()
+            geom_top = geom.top()
+            scale_x = geom.width() / float(cap.width) if cap.width > 0 else 1.0
+            scale_y = geom.height() / float(cap.height) if cap.height > 0 else 1.0
+        else:
+            geom_left = cap.left
+            geom_top = cap.top
+            scale_x = 1.0
+            scale_y = 1.0
 
-        global_x = int(geom.left() + clamped_x * scale_x)
-        global_y = int(geom.top() + clamped_y * scale_y)
-        return global_x, global_y
+        mapped = []
+        for i in range(0, len(coords), 2):
+            raw_x = coords[i]
+            raw_y = coords[i + 1] if i + 1 < len(coords) else 0
+
+            # If coordinates are already in pixel space, use directly
+            px = float(raw_x)
+            py = float(raw_y)
+
+            clamped_px = max(0.0, min(px, float(cap.width)))
+            clamped_py = max(0.0, min(py, float(cap.height)))
+
+            gx = int(geom_left + clamped_px * scale_x)
+            gy = int(geom_top + clamped_py * scale_y)
+            mapped.extend([gx, gy])
+
+        return mapped
 
     def run_onboarding_demo(self):
         """Show off pointing capabilities during onboarding demo."""
@@ -275,22 +330,23 @@ class CompanionManager(QObject):
         self.status_updated.emit("Running Demo...")
 
         app = QApplication.instance()
-        primary_geom = app.primaryScreen().geometry()
-        target_x = primary_geom.left() + primary_geom.width() // 2
-        target_y = primary_geom.top() + primary_geom.height() // 3
+        primary_geom = app.primaryScreen().geometry() if app else None
+        target_x = (primary_geom.left() + primary_geom.width() // 2) if primary_geom else 960
+        target_y = (primary_geom.top() + primary_geom.height() // 3) if primary_geom else 360
 
         sounds.play_activate()
         self.overlay.point_to(target_x, target_y, "hey! i'm athena")
         self.overlay.set_voice_state(VoiceState.RESPONDING)
 
-        welcome_text = "hey! i'm athena. hold control plus shift anytime and talk to me, or hold control plus alt to dictate text directly into any app."
+        welcome_text = "hey! i'm athena. hold control plus alt anytime and talk to me."
 
-        if self.config.get("floating_card_enabled", True):
-            self.history_hud.show_response(welcome_text, "Who are you?")
+        if self.config.get("top_bar_hud_enabled", True) or self.config.get("floating_card_enabled", True):
+            self.sig_show_response.emit(welcome_text, "Who are you?")
 
         def on_done():
             self.overlay.start_flying_back()
             self.overlay.set_voice_state(VoiceState.IDLE)
             self.status_updated.emit("Ready")
+            self.sig_schedule_collapse.emit(2500)
 
         self.tts_engine.speak(welcome_text, on_complete=on_done)

@@ -9,28 +9,32 @@
 
 **Athena** is an always-on, perceptive AI desktop companion for Windows, reverse-engineered and built from the ground up to bring the elegance and capabilities of macOS companion apps (such as HeyClicky) to Windows with **zero subscription fees**.
 
-Athena lives transparently on your screen, follows your cursor with fluid spring physics, captures your screen context when spoken to, points precisely at UI elements using quadratic Bézier flight swoops, and speaks back conversationally with natural neural voices.
+Athena lives transparently on your screen, follows your cursor with fluid spring physics, captures your screen context when spoken to, points precisely at UI elements using quadratic Bézier flight swoops, draws visual bounding boxes and workflow simulations, and speaks back conversationally with natural neural voices.
 
 ---
 
 ## ✨ Key Capabilities
 
-* **Push-to-Talk Screen Awareness**: Hold `Ctrl + Shift` anywhere in Windows to speak. Athena records your microphone, grabs multi-monitor screenshots, transcribes speech locally, and answers in under 1.5 seconds.
-* **Global Voice Dictation Mode**: Hold `Ctrl + Alt` anywhere in Windows to voice-type directly into any focused application (VS Code, Chrome, Slack, Word, Terminal, etc.) via local Whisper STT. Text is cleanly injected without corrupting clipboard history.
-* **Deep Context Awareness**: Athena automatically inspects the active foreground application (e.g. `Visual Studio Code`, `Chrome`), active window/document title, and currently highlighted/selected text, feeding it to Gemini for situational accuracy.
-* **Interactive Modern Audio Cues**: Pleasant zero-latency audio chimes on hotkey activation, thinking swell, target pointing arrival, and dictation start/stop (fully toggleable in settings).
-* **Floating Answer & History HUD**: A sleek translucent glassmorphic card displayed near the bottom-right of the screen showing spoken answers with a 1-click "Copy Answer" button, 8s auto-fade, and automatic pause on mouse hover.
-* **Autonomous Element Pointing**: When asked how to do something, find a button, or navigate an app, Athena’s glowing blue triangle cursor detaches, performs a smooth quadratic Bézier flight animation, and points directly at the relevant element with an anchor label.
-* **Dual-Display & Multi-Monitor Support**: Native coordinate mapping across multi-monitor setups, including secondary displays positioned with negative virtual coordinates (`DISPLAY1` at `-1920, -71`).
+* **Unified Push-to-Talk Hotkey (`Ctrl + Alt`)**: One simple, ergonomic hotkey for everything. Hold `Ctrl + Alt` anywhere in Windows to speak. Athena records your microphone, grabs multi-monitor screenshots, transcribes speech locally in memory, and answers with ultra-low latency.
+* **Top-Center Black Glass Dynamic Bar HUD**:
+  * **Idle State**: A discrete, ultra-thin 2-3 mm (~10px) obsidian black glass hairline bar pinned to the top-center of your primary display.
+  * **Interactive Transitions**: Expands fluidly into an animated `Listening...` / `Thinking...` pill during interaction.
+  * **Rich Text Output & 1-Click Copy**: Displays the formatted answer text with full mouse text selection and a 1-click **"Copy Answer"** button.
+  * **Auto-Collapse**: Smoothly disappears back into the original 2-3 mm thin bar once the response is finished, never cluttering your workspace. Clicking or hovering the thin bar re-opens the latest answer anytime.
+* **On-Screen Visual Drawing & Highlighting**:
+  * **Bounding Boxes**: Glowing neon-blue translucent boxes around buttons, code regions, or error dialogs with label badges.
+  * **Focal Circles**: Pulsing highlight rings around icons, tools, or elements.
+  * **Directional Arrows**: Sleek glowing guide arrows pointing directly towards UI targets.
+  * **Workflow Simulations**: Step-by-step numbered visual paths (`①`, `②`, `③`) connected by dashed guide curves when demonstrating how to complete tasks.
+  * **On-Screen Notes**: Floating glass annotation cards anchored directly next to UI elements.
+* **Sub-Pixel Pointing Accuracy**: Re-engineered using normalized 0..1000 coordinate mapping with display geometry scaling, achieving ~1.0px accuracy across single and multi-monitor setups.
+* **Deep Context Awareness**: Athena automatically inspects the active foreground application (e.g. `Visual Studio Code`, `Chrome`), active window/document title, and currently highlighted/selected text, feeding it to Gemini for situational precision.
+* **Interactive Modern Audio Cues**: Pleasant zero-latency audio chimes on hotkey activation, thinking swell, and target pointing arrival.
 * **100% Free Multimodal Vision**:
-  * **Google Gemini 3.5 Flash**: 1,000,000 Tokens/Minute (TPM) and 1,500 requests/day free tier with state-of-the-art visual element grounding.
+  * **Google Gemini 3.5 Flash / Flash-Lite**: 1,000,000 Tokens/Minute (TPM) and 1,500 requests/day free tier with state-of-the-art visual element grounding.
   * **Groq Cloud (`qwen/qwen3.8-27b`)**: Ultra-fast open vision model.
   * **xAI Grok 2 Vision (`grok-2-vision-1212`)**: Optional paid xAI endpoint.
-* **Zero-Latency In-Memory Audio Pipeline**:
-  * **Capture**: Pure ctypes `winmm.dll` PCM capture bypassing PyAudio driver overhead.
-  * **STT**: `faster-whisper` processing raw 16kHz float32 NumPy arrays in RAM (bypassing PyAV container decode).
-  * **TTS**: Microsoft Edge Neural TTS (`en-US-JennyNeural`, `en-GB-SoniaNeural`, `en-US-GuyNeural`) streamed in real-time.
-* **Transparent Click-Through Overlay**: Fullscreen Win32 layered window (`WS_EX_LAYERED | WS_EX_TRANSPARENT`) running at 60 FPS without intercepting mouse clicks intended for underlying applications.
+* **Transparent Click-Through Overlay**: Fullscreen Win32 layered window (`WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE`) running at 60 FPS without intercepting mouse clicks intended for underlying applications.
 
 ---
 
@@ -38,10 +42,12 @@ Athena lives transparently on your screen, follows your cursor with fluid spring
 
 ```mermaid
 flowchart TD
-    User([User Press: Ctrl + Shift]) --> Hotkey[GetAsyncKeyState Hardware Poller]
+    User([User Press: Ctrl + Alt]) --> Hotkey[GetAsyncKeyState Hardware Poller]
     Hotkey -->|Record Audio| Rec[ctypes winmm.dll PCM Recorder]
+    Hotkey -->|Signal Listening| HUD[Top-Center Black Glass HUD]
     Hotkey -->|On Key Release| STT[Faster-Whisper In-Memory STT]
     Hotkey -->|Capture Display| Screen[Multi-Monitor Screen Capture MSS/GDI]
+    Hotkey -->|Signal Thinking| HUD
     
     STT -->|Transcript| AI[Athena Universal AI Vision Client]
     Screen -->|Base64 JPEG| AI
@@ -52,14 +58,16 @@ flowchart TD
         AI -->|Auto-Route xai-| Grok[xAI Grok 2 Vision]
     end
     
-    Gemini -->|Spoken Response + POINT:x,y:label| Coord[Multi-Monitor Coordinate Mapper]
-    Groq -->|Spoken Response + POINT:x,y:label| Coord
+    Gemini -->|Spoken Response + POINT/DRAW/SIMULATE Tags| Parser[Visual Tag & Coordinate Parser]
     
-    Coord -->|Point Target| Flight[Bézier Flight & Spring Animation Engine]
-    Flight --> Overlay[Transparent Layered PyQt5 Overlay]
+    Parser -->|Copyable Answer Text| HUD
+    Parser -->|Box / Circle / Arrow / Sim| Overlay[Transparent Layered PyQt5 Overlay]
+    Parser -->|Target Coordinates| Flight[Bézier Flight Pointing Engine]
+    Flight --> Overlay
     
-    Gemini -->|Spoken Text| TTS[Microsoft Edge Neural TTS]
+    Parser -->|Spoken Text| TTS[Microsoft Edge Neural TTS]
     TTS --> Audio[Pygame Audio Streamer]
+    TTS -->|Speech Done| HUDCollapse[Auto-Collapse to 2-3 mm Idle Bar]
 ```
 
 ---
@@ -87,9 +95,10 @@ Athena supports free API keys from **Google AI Studio** or **Groq Cloud**:
 4. Paste your key (starts with `AQ.` or `AIza...`), click **"Test"** (turns green to indicate `Connected!`), and click **"Save"**.
 
 ### 3. Usage & Hotkeys
-* **Hold `Ctrl + Shift`**: The triangle cursor pulses red and displays a live audio waveform. Speak your question or request.
-* **Release `Ctrl + Shift`**: Athena captures the active display, shows a spinning ring while reasoning, and speaks the answer. If an element is referenced, Athena flies to and points at the element on screen!
-* **System Tray Icon**: Click the blue triangle in the taskbar notification tray to open the control panel, adjust voices, or run the interactive pointing demo.
+* **Hold `Ctrl + Alt`**: The top-center bar smoothly expands to `Listening...` with a blue audio pulse. Speak your question or request.
+* **Release `Ctrl + Alt`**: The bar shows `Thinking...`. Athena captures your screens, reasons over your question, displays the copyable text in the top bar, draws any requested visual guides (boxes, circles, arrows, simulations), and speaks the answer.
+* **Auto-Collapse**: As soon as speech finishes, the top bar smoothly collapses into the thin 2-3 mm black glass bar.
+* **1-Click Copy**: Click **"Copy Answer"** or click the collapsed bar anytime to view and copy previous responses.
 
 ---
 
@@ -101,31 +110,31 @@ Settings are saved in your user home directory at `~/.athena/config.json`:
 {
   "api_key": "YOUR_GEMINI_OR_GROQ_API_KEY_HERE",
   "model": "auto",
-  "hotkey": "ctrl+shift",
+  "hotkey": "ctrl+alt",
   "tts_voice": "en-US-JennyNeural",
   "tts_rate": "+0%",
+  "top_bar_hud_enabled": true,
   "transient_mode": false,
   "whisper_model": "base.en",
   "cursor_color": "#3380FF",
-  "conversation_history_limit": 10,
-  "system_prompt_rules": true
+  "conversation_history_limit": 10
 }
 ```
 
 ---
 
-## 📦 Building Standalone Executable (`athena.exe`)
+## 📦 Standalone Executable (`athena.exe`)
 
-To compile Athena into a standalone Windows `.exe`:
+Athena compiles into a completely standalone Windows executable with all neural models and audio drivers bundled:
 
 ```powershell
 python build_exe.py
 ```
 
-The resulting application is generated at `dist/athena/athena.exe`.
+The resulting standalone executable is automatically deployed to:
+`C:\Users\<user>\Downloads\athena.exe`.
 
 ---
 
 ## 📄 License
 MIT License. Created by Charukhesh.
-

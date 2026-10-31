@@ -1,19 +1,21 @@
 """AI Vision Client for Athena Desktop Companion.
 
 Supports:
-1. Google Gemini (aistudio.google.com) - gemini-3.5-flash (1,000,000 TPM Free Tier)
+1. Google Gemini (aistudio.google.com) - gemini-3.5-flash-lite / gemini-3.5-flash (1,000,000 TPM Free Tier)
 2. Groq Cloud (console.groq.com) - qwen/qwen3.8-27b
 3. xAI Grok (console.x.ai) - grok-2-vision-1212
 
 Automatically detects provider based on key format (AQ./AIza vs gsk_ vs xai-),
-preserves coordinate pointing with [POINT:x,y:label] element grounding.
+preserves coordinate pointing with [POINT:x,y:label], visual bounding box drawing
+[DRAW:box,x1,y1,x2,y2:label], circle highlighting [DRAW:circle,cx,cy,r:label],
+guide arrows [DRAW:arrow,x1,y1,x2,y2:label], and step simulation [SIMULATE:x1,y1->x2,y2:label].
 """
 
 import re
 import json
 import base64
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import List, Optional, Tuple, Dict, Any
 import httpx
 
@@ -39,21 +41,30 @@ rules:
 - instead, when it fits naturally, end by planting a seed — mention something bigger or more ambitious they could try, a related concept that goes deeper, or a next-level technique that builds on what you just explained. make it something worth coming back for, not a question they'd just nod to. it's okay to not end with anything extra if the answer is complete on its own.
 - if you receive multiple screen images, the one labeled "primary focus" is where the cursor is — prioritize that one but reference others if relevant.
 
-element pointing:
-you have a small glowing triangle cursor that can fly to and point at things on screen. use it whenever pointing would genuinely help the user — if they're asking how to do something, looking for a menu, trying to find a button, or need help navigating an app, point at the relevant element. err on the side of pointing rather than not pointing, because it makes your help way more useful and concrete.
+visual assistance (pointing, drawing, simulation):
+you have a small glowing triangle cursor and visual overlay engine that can point at things, draw bounding boxes, highlight circles, arrows, and simulate workflow paths on screen. use them whenever visual assistance would genuinely help the user navigate, debug, or learn:
+1. Pointing:
+   Fly your glowing blue cursor to point at a specific UI element: [POINT:x,y:label] or [POINT:x,y:label:screenN]
+2. Visual Drawing & Highlighting:
+   To draw a glowing box around a button, error, code, or area: [DRAW:box,x1,y1,x2,y2:label]
+   To draw a glowing circle around an icon or focal point: [DRAW:circle,x,y,radius:label]
+   To draw a directional guide arrow pointing towards an element: [DRAW:arrow,startX,startY,targetX,targetY:label]
+   To write a floating note next to an element: [WRITE:x,y:note text]
+3. Workflow Simulation:
+   If the user asks you to simulate, demonstrate, or show steps for how to perform an action:
+   [SIMULATE:x1,y1->x2,y2(->x3,y3...):workflow label]
+   This draws a connected numbered path (①, ②, ③) guiding them through the exact sequence of clicks or interactions.
 
-don't point at things when it would be pointless — like if the user asks a general knowledge question, or the conversation has nothing to do with what's on screen, or you'd just be pointing at something obvious they're already looking at. but if there's a specific UI element, menu, button, or area on screen that's relevant to what you're helping with, point at it.
-
-when you point, append a coordinate tag at the very end of your response, AFTER your spoken text. the screenshot images are labeled with their pixel dimensions. use those dimensions as the coordinate space. the origin (0,0) is the top-left corner of the image. x increases rightward, y increases downward.
-
-format: [POINT:x,y:label] where x,y are integer pixel coordinates in the screenshot's coordinate space, and label is a short 1-3 word description of the element (like "search bar" or "save button"). if the element is on the cursor's screen you can omit the screen number. if the element is on a DIFFERENT screen, append :screenN where N is the screen number from the image label (e.g. :screen2). this is important — without the screen number, the cursor will point at the wrong place.
-
-if pointing wouldn't help, append [POINT:none].
+coordinate space:
+coordinates are normalized to a 0..1000 integer coordinate space where (0,0) is top-left and (1000,1000) is bottom-right of the screenshot image.
+append your tag(s) at the very end of your response, AFTER your spoken text.
+if pointing or drawing wouldn't help (e.g. general knowledge question), append [POINT:none].
 
 examples:
-- user asks how to save: "click that blue save button in the top toolbar to keep your changes. [POINT:850,38:save button]"
+- user asks how to save: "click that blue save button in the top toolbar to keep your changes. [POINT:495,37:save button]"
+- user asks to highlight an error: "that syntax error is happening right here in your import statement. [DRAW:box,120,340,580,380:syntax error]"
+- user asks how to add a file: "first click the new file button up top, then name it in the sidebar. [SIMULATE:48,110->160,240:add new file]"
 - user asks what html is: "html stands for hypertext markup language, basically the skeleton of every website. curious how it hooks into the css you're editing? [POINT:none]"
-- user asks where settings is: "open up settings using that gear icon right down in the bottom left. [POINT:48,980:settings gear]"
 """
 
 # Backwards compatibility alias
@@ -69,10 +80,19 @@ class PointingTarget:
 
 
 @dataclass
+class VisualDrawing:
+    kind: str  # "box", "circle", "arrow", "simulate", "text"
+    coords: List[int]  # [x1, y1, x2, y2] or [cx, cy, r] or [x1, y1, x2, y2, ...]
+    label: str
+    screen_number: int = 1
+
+
+@dataclass
 class AIVisionResponse:
     full_text: str
     spoken_text: str
     point_target: Optional[PointingTarget] = None
+    drawings: List[VisualDrawing] = field(default_factory=list)
 
 
 # Backward compatibility alias
@@ -96,20 +116,11 @@ class AIVisionClient:
         # 1. Google Gemini (aistudio.google.com) -> starts with 'AQ.' or 'AIza'
         if key.startswith("AQ.") or key.startswith("AIza") or "gemini" in self.configured_model.lower():
             endpoint = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
-            model = (
-                self.configured_model
-                if self.configured_model not in (
-                    "auto",
-                    "grok-2-vision-1212",
-                    "grok-vision-beta",
-                    "llama-3.2-11b-vision-preview",
-                    "llama-3.2-90b-vision-preview",
-                    "qwen/qwen3.8-27b",
-                    "gemini-2.0-flash",
-                    "gemini-2.5-flash",
-                )
-                else "gemini-3.5-flash-lite"
-            )
+            # Support gemini-3.5-flash-lite as the robust 1,000,000 TPM default
+            if self.configured_model in ("gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-3.1-flash-lite"):
+                model = self.configured_model
+            else:
+                model = "gemini-3.5-flash-lite"
             return "Google Gemini (aistudio.google.com)", endpoint, model
 
         # 2. Groq (console.groq.com) -> starts with 'gsk_'
@@ -158,21 +169,19 @@ class AIVisionClient:
         }
         payload = {
             "model": active_model,
-            "messages": [{"role": "user", "content": "ping"}],
+            "messages": [{"role": "user", "content": "respond with pong"}],
             "max_tokens": 10,
         }
 
         try:
-            with httpx.Client(timeout=15.0) as client:
+            with httpx.Client(timeout=10.0) as client:
                 res = client.post(endpoint_url, headers=headers, json=payload)
-                if res.status_code == 200:
-                    return True, f"Connected successfully to {provider_name} using model {active_model}!"
-                elif res.status_code == 401:
-                    return False, f"401 Unauthorized: Invalid API key for {provider_name}."
-                else:
-                    return False, f"HTTP {res.status_code}: {res.text[:200]}"
+                res.raise_for_status()
+                return True, f"Successfully connected to {provider_name} ({active_model})."
+        except httpx.HTTPStatusError as e:
+            return False, f"HTTP {e.response.status_code}: {e.response.text[:200]}"
         except Exception as e:
-            return False, f"Connection error: {str(e)}"
+            return False, f"Connection error: {e}"
 
     def query(
         self,
@@ -233,7 +242,7 @@ class AIVisionClient:
             "model": active_model,
             "messages": messages,
             "temperature": 0.4,
-            "max_tokens": 350,
+            "max_tokens": 450,
         }
 
         try:
@@ -243,10 +252,13 @@ class AIVisionClient:
             response = self._http_client.post(endpoint_url, headers=headers, json=payload)
             response.raise_for_status()
             data = response.json()
-            raw_reply = data["choices"][0]["message"]["content"]
+            raw_reply = data["choices"][0]["message"].get("content", "")
 
-            # Parse pointing coordinates
-            spoken_text, point_target = self.parse_pointing_coordinates(raw_reply)
+            # Parse pointing coordinates and visual drawings
+            spoken_text, point_target, drawings = self.parse_visual_tags(raw_reply)
+
+            # Map normalized [0..1000] coordinates to screenshot pixel resolution
+            point_target, drawings = self._scale_to_capture_pixels(point_target, drawings, screen_captures)
 
             # Save exchange in history
             self.conversation_history.append((transcript, spoken_text))
@@ -257,6 +269,7 @@ class AIVisionClient:
                 full_text=raw_reply,
                 spoken_text=spoken_text,
                 point_target=point_target,
+                drawings=drawings,
             )
 
         except httpx.HTTPStatusError as e:
@@ -267,6 +280,8 @@ class AIVisionClient:
                 err_msg = f"invalid api key for {provider_name}. please check your key in settings"
             elif "model_not_found" in err_body or "deactivated" in err_body or "no longer available" in err_body:
                 err_msg = f"model {active_model} is unavailable on {provider_name}. please select another model"
+            elif e.response.status_code == 429:
+                err_msg = "api rate limit exceeded. please wait a moment before trying again"
             else:
                 err_msg = f"api error {e.response.status_code}. check your network or key"
 
@@ -276,31 +291,157 @@ class AIVisionClient:
             err_msg = "sorry, i ran into an issue connecting to the vision service"
             return AIVisionResponse(full_text=err_msg, spoken_text=err_msg)
 
+    def _scale_to_capture_pixels(
+        self,
+        point_target: Optional[PointingTarget],
+        drawings: List[VisualDrawing],
+        screen_captures: List[ScreenCaptureResult],
+    ) -> Tuple[Optional[PointingTarget], List[VisualDrawing]]:
+        """Scale normalized [0..1000] coordinates to physical screenshot pixel dimensions."""
+        if not screen_captures:
+            return point_target, drawings
+
+        # Scale point_target
+        if point_target:
+            cap = screen_captures[0]
+            if 1 <= point_target.screen_number <= len(screen_captures):
+                cap = screen_captures[point_target.screen_number - 1]
+            if cap.width > 1050 or cap.height > 1050:
+                if 0 <= point_target.x <= 1000 and 0 <= point_target.y <= 1000:
+                    scaled_x = int(round((point_target.x / 1000.0) * cap.width))
+                    scaled_y = int(round((point_target.y / 1000.0) * cap.height))
+                    point_target = PointingTarget(
+                        x=scaled_x,
+                        y=scaled_y,
+                        label=point_target.label,
+                        screen_number=point_target.screen_number,
+                    )
+
+        # Scale drawings
+        scaled_drawings = []
+        for d in drawings:
+            cap = screen_captures[0]
+            if 1 <= d.screen_number <= len(screen_captures):
+                cap = screen_captures[d.screen_number - 1]
+
+            if (cap.width > 1050 or cap.height > 1050) and all(0 <= c <= 1000 for c in d.coords):
+                scaled_coords = []
+                for i in range(0, len(d.coords), 2):
+                    cx = d.coords[i]
+                    cy = d.coords[i + 1] if i + 1 < len(d.coords) else 0
+                    sx = int(round((cx / 1000.0) * cap.width))
+                    sy = int(round((cy / 1000.0) * cap.height))
+                    scaled_coords.extend([sx, sy])
+                scaled_drawings.append(VisualDrawing(
+                    kind=d.kind,
+                    coords=scaled_coords,
+                    label=d.label,
+                    screen_number=d.screen_number,
+                ))
+            else:
+                scaled_drawings.append(d)
+
+        return point_target, scaled_drawings
+
+    @classmethod
+    def parse_pointing_coordinates(cls, response_text: str) -> Tuple[str, Optional[PointingTarget]]:
+        """Backward-compatible pointing coordinate parser."""
+        spoken, target, _ = cls.parse_visual_tags(response_text)
+        return spoken, target
+
     @staticmethod
-    def parse_pointing_coordinates(response_text: str) -> Tuple[str, Optional[PointingTarget]]:
-        """Parse [POINT:x,y:label], [POINT:x,y,label], or [POINT:none] tag from reply text."""
-        # Accepts both ':' and ',' separators for maximum LLM model compatibility
+    def parse_visual_tags(response_text: str) -> Tuple[str, Optional[PointingTarget], List[VisualDrawing]]:
+        """Parse [POINT:...], [DRAW:...], [SIMULATE:...], and [WRITE:...] tags from reply text."""
+        spoken = response_text
+        point_target: Optional[PointingTarget] = None
+        drawings: List[VisualDrawing] = []
+
+        # 1. Parse [POINT:x,y:label] or [POINT:x,y:label:screenN]
         point_pattern = re.compile(
             r"\[POINT:\s*(\d+)\s*,\s*(\d+)\s*[,:]\s*([^:,\]]+)(?:[,:]\s*screen(\d+))?\s*\]",
             re.IGNORECASE,
         )
+        match_point = point_pattern.search(spoken)
+        if match_point:
+            x = int(match_point.group(1))
+            y = int(match_point.group(2))
+            label = match_point.group(3).strip()
+            screen_num = int(match_point.group(4)) if match_point.group(4) else 1
+            point_target = PointingTarget(x=x, y=y, label=label, screen_number=screen_num)
+            spoken = point_pattern.sub("", spoken)
 
-        match = point_pattern.search(response_text)
-        if match:
-            x = int(match.group(1))
-            y = int(match.group(2))
-            label = match.group(3).strip()
-            screen_num = int(match.group(4)) if match.group(4) else 1
+        # 2. Parse [DRAW:box,x1,y1,x2,y2:label(:screenN)]
+        box_pattern = re.compile(
+            r"\[DRAW:\s*box\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*[,:]\s*([^:,\]]+)(?:[,:]\s*screen(\d+))?\s*\]",
+            re.IGNORECASE,
+        )
+        for m in box_pattern.finditer(spoken):
+            x1, y1, x2, y2 = int(m.group(1)), int(m.group(2)), int(m.group(3)), int(m.group(4))
+            lbl = m.group(5).strip()
+            s_num = int(m.group(6)) if m.group(6) else 1
+            drawings.append(VisualDrawing(kind="box", coords=[x1, y1, x2, y2], label=lbl, screen_number=s_num))
+        spoken = box_pattern.sub("", spoken)
 
-            spoken = point_pattern.sub("", response_text).strip()
-            spoken = re.sub(r"\[POINT:\s*none\s*\]", "", spoken, flags=re.IGNORECASE).strip()
+        # 3. Parse [DRAW:circle,cx,cy,radius:label(:screenN)]
+        circle_pattern = re.compile(
+            r"\[DRAW:\s*circle\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*[,:]\s*([^:,\]]+)(?:[,:]\s*screen(\d+))?\s*\]",
+            re.IGNORECASE,
+        )
+        for m in circle_pattern.finditer(spoken):
+            cx, cy, r = int(m.group(1)), int(m.group(2)), int(m.group(3))
+            lbl = m.group(4).strip()
+            s_num = int(m.group(5)) if m.group(5) else 1
+            drawings.append(VisualDrawing(kind="circle", coords=[cx, cy, r], label=lbl, screen_number=s_num))
+        spoken = circle_pattern.sub("", spoken)
 
-            return spoken, PointingTarget(x=x, y=y, label=label, screen_number=screen_num)
+        # 4. Parse [DRAW:arrow,x1,y1,x2,y2:label(:screenN)]
+        arrow_pattern = re.compile(
+            r"\[DRAW:\s*arrow\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*[,:]\s*([^:,\]]+)(?:[,:]\s*screen(\d+))?\s*\]",
+            re.IGNORECASE,
+        )
+        for m in arrow_pattern.finditer(spoken):
+            x1, y1, x2, y2 = int(m.group(1)), int(m.group(2)), int(m.group(3)), int(m.group(4))
+            lbl = m.group(5).strip()
+            s_num = int(m.group(6)) if m.group(6) else 1
+            drawings.append(VisualDrawing(kind="arrow", coords=[x1, y1, x2, y2], label=lbl, screen_number=s_num))
+        spoken = arrow_pattern.sub("", spoken)
 
-        spoken = re.sub(r"\[POINT:\s*none\s*\]", "", response_text, flags=re.IGNORECASE).strip()
-        return spoken, None
+        # 5. Parse [SIMULATE:x1,y1->x2,y2(->x3,y3...):label]
+        simulate_pattern = re.compile(
+            r"\[SIMULATE:\s*([0-9,\->\s]+)\s*[,:]\s*([^:,\]]+)(?:[,:]\s*screen(\d+))?\s*\]",
+            re.IGNORECASE,
+        )
+        for m in simulate_pattern.finditer(spoken):
+            path_str = m.group(1).strip()
+            lbl = m.group(2).strip()
+            s_num = int(m.group(3)) if m.group(3) else 1
+            # Parse nodes: "x1,y1->x2,y2"
+            raw_coords = []
+            for seg in path_str.split("->"):
+                parts = seg.replace(" ", "").split(",")
+                if len(parts) >= 2 and parts[0].isdigit() and parts[1].isdigit():
+                    raw_coords.extend([int(parts[0]), int(parts[1])])
+            if len(raw_coords) >= 4:
+                drawings.append(VisualDrawing(kind="simulate", coords=raw_coords, label=lbl, screen_number=s_num))
+        spoken = simulate_pattern.sub("", spoken)
+
+        # 6. Parse [WRITE:x,y:text]
+        write_pattern = re.compile(
+            r"\[WRITE:\s*(\d+)\s*,\s*(\d+)\s*[,:]\s*([^:,\]]+)(?:[,:]\s*screen(\d+))?\s*\]",
+            re.IGNORECASE,
+        )
+        for m in write_pattern.finditer(spoken):
+            x, y = int(m.group(1)), int(m.group(2))
+            txt = m.group(3).strip()
+            s_num = int(m.group(4)) if m.group(4) else 1
+            drawings.append(VisualDrawing(kind="text", coords=[x, y], label=txt, screen_number=s_num))
+        spoken = write_pattern.sub("", spoken)
+
+        # Remove negative control tag [POINT:none]
+        spoken = re.sub(r"\[POINT:\s*none\s*\]", "", spoken, flags=re.IGNORECASE).strip()
+
+        return spoken.strip(), point_target, drawings
 
 
 # Backward compatibility alias
 GrokClient = AIVisionClient
-
