@@ -11,50 +11,89 @@ from pathlib import Path
 
 def build():
     root_dir = Path(__file__).resolve().parent
-    main_script = root_dir / "run_athena.py"
     dist_dir = root_dir / "dist"
+    build_dir = root_dir / "build"
     downloads_dir = Path.home() / "Downloads"
     target_exe = downloads_dir / "athena.exe"
+    spec_path = root_dir / "athena.spec"
 
     # Clean up previous build artifacts
     shutil.rmtree(dist_dir, ignore_errors=True)
-    shutil.rmtree(root_dir / "build", ignore_errors=True)
+    shutil.rmtree(build_dir, ignore_errors=True)
+
+    # Write optimized athena.spec with explicit exclusions of unused heavy Anaconda packages
+    spec_content = f"""# -*- mode: python ; coding: utf-8 -*-
+from PyInstaller.utils.hooks import collect_data_files
+from PyInstaller.utils.hooks import collect_dynamic_libs
+
+datas = [(r'{root_dir / "athena"}', 'athena')]
+binaries = []
+datas += collect_data_files('ctranslate2')
+datas += collect_data_files('faster_whisper')
+binaries += collect_dynamic_libs('ctranslate2')
+
+a = Analysis(
+    [r'{root_dir / "run_athena.py"}'],
+    pathex=[],
+    binaries=binaries,
+    datas=datas,
+    hiddenimports=[
+        'PyQt5', 'PyQt5.QtCore', 'PyQt5.QtGui', 'PyQt5.QtWidgets',
+        'faster_whisper', 'ctranslate2', 'edge_tts', 'mss', 'httpx',
+        'PIL', 'winsound', 'psutil'
+    ],
+    hookspath=[],
+    hooksconfig={{}},
+    runtime_hooks=[],
+    excludes=[
+        'ctranslate2.converters',
+        'torch', 'torchvision', 'torchaudio',
+        'tensorflow', 'keras', 'onnxruntime', 'transformers',
+        'pandas', 'scipy', 'matplotlib', 'pytest',
+        'IPython', 'notebook', 'tornado', 'sympy', 'bokeh',
+        'statsmodels', 'seaborn', 'cv2', 'skimage', 'sklearn',
+        'nltk', 'astropy', 'botocore', 'sqlalchemy', 'plotly',
+        'panel', 'dask', 'distributed', 'numba',
+        'PyQt5.QtWebEngineCore', 'PyQt5.QtWebEngineWidgets',
+        'PyQt5.QtQml', 'PyQt5.QtQuick', 'PyQt5.QtQuickWidgets',
+        'PyQt5.QtPositioning', 'PyQt5.QtPrintSupport',
+        'PyQt5.QtBluetooth', 'PyQt5.QtNfc', 'PyQt5.QtSensors'
+    ],
+    noarchive=False,
+    optimize=0,
+)
+pyz = PYZ(a.pure)
+
+exe = EXE(
+    pyz,
+    a.scripts,
+    a.binaries,
+    a.datas,
+    [],
+    name='athena',
+    debug=False,
+    bootloader_ignore_signals=False,
+    strip=False,
+    upx=False,
+    upx_exclude=[],
+    runtime_tmpdir=None,
+    console=False,
+    disable_windowed_traceback=False,
+    argv_emulation=False,
+    target_arch=None,
+    codesign_identity=None,
+    entitlements_file=None,
+)
+"""
+    spec_path.write_text(spec_content, encoding="utf-8")
 
     cmd = [
         sys.executable,
         "-m",
         "PyInstaller",
-        "--name", "athena",
-        "--noconsole",
-        "--onefile",
         "--clean",
         "--noconfirm",
-        "--add-data", f"{root_dir / 'athena'};athena",
-        "--collect-all", "faster_whisper",
-        "--collect-all", "ctranslate2",
-        "--exclude-module", "pandas",
-        "--exclude-module", "scipy",
-        "--exclude-module", "matplotlib",
-        "--exclude-module", "pytest",
-        "--exclude-module", "IPython",
-        "--exclude-module", "notebook",
-        "--exclude-module", "tornado",
-        "--exclude-module", "sympy",
-        "--exclude-module", "bokeh",
-        "--exclude-module", "statsmodels",
-        "--exclude-module", "seaborn",
-        "--hidden-import", "PyQt5",
-        "--hidden-import", "PyQt5.QtCore",
-        "--hidden-import", "PyQt5.QtGui",
-        "--hidden-import", "PyQt5.QtWidgets",
-        "--hidden-import", "faster_whisper",
-        "--hidden-import", "edge_tts",
-        "--hidden-import", "mss",
-        "--hidden-import", "httpx",
-        "--hidden-import", "PIL",
-        "--hidden-import", "winsound",
-        "--hidden-import", "psutil",
-        str(main_script)
+        str(spec_path)
     ]
 
     print("=" * 60)
@@ -62,7 +101,7 @@ def build():
     print("=" * 60)
     print(f"Target: Single-file Windows executable (athena.exe)")
     print(f"Output destination: {target_exe}")
-    print("Executing command:", " ".join(cmd[:10]), "...")
+    print("Executing command:", " ".join(cmd))
 
     result = subprocess.run(cmd, cwd=str(root_dir))
     if result.returncode != 0:
