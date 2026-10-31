@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+build/
+dist/
+*.spec
+
+# Application Data & Secrets
+.env
+.env.*
+*.key
+*.pem
+credentials.json
+config.local.json
+.clicky/
+.athena/
+
+# Cloned External Frameworks (Reverse Engineering Tools)
+rea/
+clicky/
+
+# Temporary & Runtime Logs
+*.log
+.system_generated/
+.idea/
+.vscode/
+Thumbs.db
+Desktop.ini
+
