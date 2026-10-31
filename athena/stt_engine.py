@@ -27,12 +27,13 @@ def get_whisper_model(model_size: str = "base.en"):
         if _WHISPER_MODEL is None:
             try:
                 from faster_whisper import WhisperModel
-                logger.info(f"Loading faster-whisper model '{model_size}' on CPU/int8...")
+                threads = min(8, os.cpu_count() or 4)
+                logger.info(f"Loading faster-whisper model '{model_size}' on CPU/int8 with {threads} threads...")
                 _WHISPER_MODEL = WhisperModel(
                     model_size,
                     device="cpu",
                     compute_type="int8",
-                    cpu_threads=4,
+                    cpu_threads=threads,
                 )
                 logger.info("Faster-whisper model loaded successfully.")
             except Exception as e:
@@ -60,10 +61,13 @@ class SpeechToText:
             if model:
                 segments, info = model.transcribe(
                     audio_array,
-                    beam_size=3,
+                    beam_size=1,
+                    best_of=1,
+                    temperature=0.0,
+                    condition_on_previous_text=False,
                     language="en",
                     vad_filter=True,
-                    vad_parameters=dict(min_silence_duration_ms=300),
+                    vad_parameters=dict(min_silence_duration_ms=250),
                 )
                 text = " ".join([seg.text.strip() for seg in segments]).strip()
                 if text:

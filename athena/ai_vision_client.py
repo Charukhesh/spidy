@@ -108,7 +108,7 @@ class AIVisionClient:
                     "gemini-2.0-flash",
                     "gemini-2.5-flash",
                 )
-                else "gemini-3.5-flash"
+                else "gemini-3.5-flash-lite"
             )
             return "Google Gemini (aistudio.google.com)", endpoint, model
 
@@ -232,30 +232,32 @@ class AIVisionClient:
         payload = {
             "model": active_model,
             "messages": messages,
-            "temperature": 0.5,
-            "max_tokens": 1000,
+            "temperature": 0.4,
+            "max_tokens": 350,
         }
 
         try:
-            with httpx.Client(timeout=30.0) as client:
-                response = client.post(endpoint_url, headers=headers, json=payload)
-                response.raise_for_status()
-                data = response.json()
-                raw_reply = data["choices"][0]["message"]["content"]
+            if not hasattr(self, "_http_client") or self._http_client.is_closed:
+                self._http_client = httpx.Client(timeout=25.0)
 
-                # Parse pointing coordinates
-                spoken_text, point_target = self.parse_pointing_coordinates(raw_reply)
+            response = self._http_client.post(endpoint_url, headers=headers, json=payload)
+            response.raise_for_status()
+            data = response.json()
+            raw_reply = data["choices"][0]["message"]["content"]
 
-                # Save exchange in history
-                self.conversation_history.append((transcript, spoken_text))
-                if len(self.conversation_history) > self.history_limit:
-                    self.conversation_history.pop(0)
+            # Parse pointing coordinates
+            spoken_text, point_target = self.parse_pointing_coordinates(raw_reply)
 
-                return AIVisionResponse(
-                    full_text=raw_reply,
-                    spoken_text=spoken_text,
-                    point_target=point_target,
-                )
+            # Save exchange in history
+            self.conversation_history.append((transcript, spoken_text))
+            if len(self.conversation_history) > self.history_limit:
+                self.conversation_history.pop(0)
+
+            return AIVisionResponse(
+                full_text=raw_reply,
+                spoken_text=spoken_text,
+                point_target=point_target,
+            )
 
         except httpx.HTTPStatusError as e:
             err_body = e.response.text

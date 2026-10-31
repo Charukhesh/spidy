@@ -36,6 +36,39 @@ class ScreenCaptureUtility:
 
     @classmethod
     def capture_all_screens(cls) -> List[ScreenCaptureResult]:
+        # Method 0: PyQt5 native QScreen grabWindow (Fastest & direct in-memory, ~100ms)
+        try:
+            from PyQt5.QtWidgets import QApplication
+            from PyQt5.QtCore import QBuffer
+
+            app = QApplication.instance()
+            if app:
+                results = []
+                screens = app.screens()
+                primary_screen = app.primaryScreen()
+                for idx, s in enumerate(screens, start=1):
+                    pix = s.grabWindow(0)
+                    if not pix.isNull():
+                        buf = QBuffer()
+                        buf.open(QBuffer.WriteOnly)
+                        pix.save(buf, "JPEG", quality=75)
+                        geom = s.geometry()
+                        results.append(
+                            ScreenCaptureResult(
+                                image_bytes=buf.data().data(),
+                                width=pix.width(),
+                                height=pix.height(),
+                                display_index=idx,
+                                is_primary=(s == primary_screen),
+                                left=geom.left(),
+                                top=geom.top(),
+                            )
+                        )
+                if results:
+                    return results
+        except Exception as e:
+            logger.debug(f"Qt screen grab notice: {e}")
+
         # Method 1: mss
         try:
             import mss
@@ -47,7 +80,7 @@ class ScreenCaptureUtility:
                     sct_img = sct.grab(monitor)
                     img = Image.frombytes("RGB", sct_img.size, sct_img.bgra, "raw", "BGRX")
                     buf = io.BytesIO()
-                    img.save(buf, format="JPEG", quality=85, optimize=True)
+                    img.save(buf, format="JPEG", quality=75, optimize=False)
                     results.append(
                         ScreenCaptureResult(
                             image_bytes=buf.getvalue(),
@@ -70,7 +103,7 @@ class ScreenCaptureUtility:
 
             img = ImageGrab.grab(all_screens=True)
             buf = io.BytesIO()
-            img.save(buf, format="JPEG", quality=85, optimize=True)
+            img.save(buf, format="JPEG", quality=75, optimize=False)
             return [
                 ScreenCaptureResult(
                     image_bytes=buf.getvalue(),

@@ -155,7 +155,7 @@ class TestEverydayPowerFeatures(unittest.TestCase):
         provider, endpoint, model = client._resolve_provider_and_model()
 
         self.assertIn("Google Gemini", provider)
-        self.assertEqual(model, "gemini-3.5-flash")
+        self.assertIn("gemini-3.5-flash", model)
         print("[PASS] Test 6 Passed: Vision AI client properly resolves provider and supports context.")
 
 

@@ -19,6 +19,7 @@ import os
 import time
 import ctypes
 import threading
+import concurrent.futures
 import logging
 from typing import Optional
 
@@ -204,22 +205,28 @@ class CompanionManager(QObject):
     def _run_inference_pipeline(self, pcm_data: bytes):
         with self._processing_lock:
             try:
-                # 1. Capture screen context immediately upon release
-                screen_captures = ScreenCaptureUtility.capture_all_screens()
+                # 1. Concurrently run Screen Capture, Context Inspection, and Audio STT in parallel
+                with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+                    fut_screens = executor.submit(ScreenCaptureUtility.capture_all_screens)
 
-                # 2. Deep Context Awareness: inspect foreground window and highlighted text
-                active_context_str = None
-                if self.config.get("context_awareness", True):
-                    try:
-                        ctx = inspector.capture_active_context(include_selected_text=True)
-                        active_context_str = ctx.to_prompt_text()
-                        if ctx.app_name or ctx.window_title:
-                            logger.info(f"Captured active context: {ctx.app_name} | {ctx.window_title}")
-                    except Exception as ce:
-                        logger.debug(f"Context capture notice: {ce}")
+                    def _get_context():
+                        if self.config.get("context_awareness", True):
+                            try:
+                                ctx = inspector.capture_active_context(include_selected_text=True)
+                                if ctx.app_name or ctx.window_title:
+                                    logger.info(f"Captured active context: {ctx.app_name} | {ctx.window_title}")
+                                return ctx.to_prompt_text()
+                            except Exception as ce:
+                                logger.debug(f"Context capture notice: {ce}")
+                        return None
 
-                # 3. Transcribe audio in-memory using Faster-Whisper float32 array
-                transcript = self.stt_engine.transcribe_pcm(pcm_data)
+                    fut_ctx = executor.submit(_get_context)
+                    fut_stt = executor.submit(self.stt_engine.transcribe_pcm, pcm_data)
+
+                    transcript = fut_stt.result()
+                    screen_captures = fut_screens.result()
+                    active_context_str = fut_ctx.result()
+
                 logger.info(f"User voice transcript: '{transcript}'")
 
                 if not transcript.strip():

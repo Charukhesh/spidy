@@ -259,7 +259,8 @@ class CompanionPanel(QWidget):
 
         self.model_combo = QComboBox()
         self.model_combo.addItems([
-            "auto (Recommended)",
+            "auto (Recommended - 3.5 Flash Lite)",
+            "gemini-3.5-flash-lite",
             "gemini-3.5-flash",
             "qwen/qwen3.8-27b",
             "grok-2-vision-1212"
