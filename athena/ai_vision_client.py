@@ -278,9 +278,10 @@ class AIVisionClient:
 
     @staticmethod
     def parse_pointing_coordinates(response_text: str) -> Tuple[str, Optional[PointingTarget]]:
-        """Parse [POINT:x,y:label] or [POINT:none] tag from reply text."""
+        """Parse [POINT:x,y:label], [POINT:x,y,label], or [POINT:none] tag from reply text."""
+        # Accepts both ':' and ',' separators for maximum LLM model compatibility
         point_pattern = re.compile(
-            r"\[POINT:\s*(\d+)\s*,\s*(\d+)\s*:\s*([^:\]]+)(?::screen(\d+))?\s*\]",
+            r"\[POINT:\s*(\d+)\s*,\s*(\d+)\s*[,:]\s*([^:,\]]+)(?:[,:]\s*screen(\d+))?\s*\]",
             re.IGNORECASE,
         )
 

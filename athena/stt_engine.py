@@ -128,6 +128,7 @@ try {{
     Write-Output ("ERROR:" + $_.Exception.Message)
 }}
 """
+            creationflags = 0x08000000 if sys.platform == "win32" else 0
             res = subprocess.run(
                 ["powershell", "-NoProfile", "-NonInteractive", "-Command", ps_script],
                 capture_output=True,
@@ -135,6 +136,7 @@ try {{
                 encoding="utf-8",
                 errors="replace",
                 timeout=8,
+                creationflags=creationflags,
             )
             for line in res.stdout.splitlines():
                 if line.startswith("RESULT:"):

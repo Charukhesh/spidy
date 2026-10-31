@@ -1,17 +1,16 @@
-"""Multi-monitor screen capture utility for Clicky Windows.
+"""Multi-monitor screen capture utility for Athena Windows.
 
 Captures screenshots as JPEG bytes with explicit pixel dimensions
-so Grok's vision coordinate space maps 1:1 with screen points.
+so vision coordinate space maps 1:1 with screen points.
 Includes graceful multi-method fallbacks:
-1. mss (Fastest native desktop capture)
-2. PIL.ImageGrab
-3. Windows PowerShell System.Drawing
-4. Fallback canvas if display context is locked/headless
+0. Native PyQt5 QScreen (zero-process, instant in-memory capture)
+1. mss (Fast desktop capture)
+2. PIL.ImageGrab (Pure Python fallback)
+3. Fallback canvas if display context is locked/headless
 """
 
 import io
 import os
-import subprocess
 import logging
 from dataclasses import dataclass
 from typing import List, Optional
@@ -118,50 +117,7 @@ class ScreenCaptureUtility:
         except Exception as e:
             logger.debug(f"ImageGrab capture notice: {e}")
 
-        # Method 3: PowerShell System.Drawing
-        try:
-            import tempfile
-
-            with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tf:
-                tmp_path = tf.name
-
-            ps_cmd = f"""
-Add-Type -AssemblyName System.Drawing, System.Windows.Forms
-$bounds = [System.Windows.Forms.SystemInformation]::VirtualScreen
-$bmp = New-Object System.Drawing.Bitmap $bounds.Width, $bounds.Height
-$g = [System.Drawing.Graphics]::FromImage($bmp)
-$g.CopyFromScreen($bounds.Left, $bounds.Top, 0, 0, $bmp.Size)
-$bmp.Save('{tmp_path.replace("'", "''")}')
-$g.Dispose()
-$bmp.Dispose()
-"""
-            subprocess.run(
-                ["powershell", "-NoProfile", "-NonInteractive", "-Command", ps_cmd],
-                capture_output=True,
-                timeout=5,
-            )
-
-            if os.path.exists(tmp_path) and os.path.getsize(tmp_path) > 100:
-                with Image.open(tmp_path) as img:
-                    buf = io.BytesIO()
-                    img.convert("RGB").save(buf, format="JPEG", quality=85)
-                    w, h = img.size
-                os.remove(tmp_path)
-                return [
-                    ScreenCaptureResult(
-                        image_bytes=buf.getvalue(),
-                        width=w,
-                        height=h,
-                        display_index=1,
-                        is_primary=True,
-                        left=0,
-                        top=0,
-                    )
-                ]
-        except Exception as e:
-            logger.debug(f"PowerShell capture notice: {e}")
-
-        # Method 4: Fallback placeholder canvas (for headless/locked background sessions)
+        # Method 3: Fallback placeholder canvas (for headless/locked background sessions)
         logger.warning("Using fallback canvas for screen context.")
         w, h = 1920, 1080
         img = Image.new("RGB", (w, h), color=(30, 30, 35))

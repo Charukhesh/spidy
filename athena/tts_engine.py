@@ -137,7 +137,9 @@ class TextToSpeech:
             speaker.Speak(text)
         except Exception:
             import subprocess
+            import sys
             escaped = text.replace("'", "''").replace('"', '`"')
             ps = f'Add-Type -AssemblyName System.Speech; (New-Object System.Speech.Synthesis.SpeechSynthesizer).Speak("{escaped}")'
-            subprocess.run(["powershell", "-NoProfile", "-Command", ps], capture_output=True)
+            creationflags = 0x08000000 if sys.platform == "win32" else 0
+            subprocess.run(["powershell", "-NoProfile", "-Command", ps], capture_output=True, creationflags=creationflags)
 
