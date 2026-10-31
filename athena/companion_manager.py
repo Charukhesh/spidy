@@ -13,6 +13,7 @@ Orchestrates:
 """
 
 import os
+import re
 import time
 import ctypes
 import threading
@@ -175,10 +176,26 @@ class CompanionManager(QObject):
             daemon=True,
         ).start()
 
+    @staticmethod
+    def _sanitize_speech_text(text: str) -> str:
+        """Strip all technical tags and brackets to guarantee zero tags are ever spoken aloud."""
+        if not text:
+            return ""
+        # Remove [POINT:...], [DRAW:...], [SIMULATE:...], [WRITE:...], [HEARD:...], etc.
+        cleaned = re.sub(r"\[(?:POINT|DRAW|SIMULATE|WRITE|HEARD)[^\]]*\]", "", text, flags=re.IGNORECASE)
+        # Strip any other bracketed expressions like [POINT:none] or stray brackets
+        cleaned = re.sub(r"\[[^\]]*\]", "", cleaned)
+        # Clean up any leftover whitespace
+        cleaned = re.sub(r"\s+", " ", cleaned).strip()
+        return cleaned
+
     def _run_inference_pipeline(self, pcm_data: bytes):
         with self._processing_lock:
             try:
-                # 1. Concurrently run Screen Capture, Context Inspection, and Audio STT in parallel
+                stt_mode = self.config.get("stt_mode", "gemini_direct_audio")
+                use_direct_audio = (stt_mode == "gemini_direct_audio")
+
+                # 1. Concurrently run Screen Capture, Context Inspection, and STT in parallel
                 with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
                     fut_screens = executor.submit(ScreenCaptureUtility.capture_all_screens)
 
@@ -194,34 +211,36 @@ class CompanionManager(QObject):
                         return None
 
                     fut_ctx = executor.submit(_get_context)
-                    fut_stt = executor.submit(self.stt_engine.transcribe_pcm, pcm_data)
+                    fut_stt = None
+                    if not use_direct_audio:
+                        fut_stt = executor.submit(self.stt_engine.transcribe_pcm, pcm_data)
 
-                    transcript = fut_stt.result()
                     screen_captures = fut_screens.result()
                     active_context_str = fut_ctx.result()
+                    transcript = fut_stt.result() if fut_stt else ""
 
-                logger.info(f"User voice transcript: '{transcript}'")
+                wav_bytes = AudioRecorder.pcm_to_wav_bytes(pcm_data) if use_direct_audio else None
 
-                if not transcript.strip():
-                    logger.info("Empty transcript. Resetting.")
-                    self.overlay.set_voice_state(VoiceState.IDLE)
-                    self.status_updated.emit("Ready")
-                    self.sig_collapse_bar.emit()
-                    return
-
-                # 4. Query Multimodal AI Vision (Gemini / Groq / Grok) with Active Context
+                # 2. Query Multimodal AI Vision (Gemini Direct Audio / Groq / Grok) with Active Context
                 ai_response = self.ai_client.query(
-                    transcript,
-                    screen_captures,
+                    transcript=transcript,
+                    screen_captures=screen_captures,
                     active_context=active_context_str,
+                    audio_bytes=wav_bytes,
                 )
                 logger.info(f"Athena AI replied: '{ai_response.spoken_text}'")
 
+                # Determine prompt text to display in Top-Center Glass HUD
+                display_query = (ai_response.heard_prompt or transcript or "Voice Request").strip()
+
+                # Clean speech text to guarantee zero tags are read aloud
+                sanitized_speech = self._sanitize_speech_text(ai_response.spoken_text)
+
                 # Show Top-Center Black Glass HUD response with copy button!
                 if self.config.get("top_bar_hud_enabled", True) or self.config.get("floating_card_enabled", True):
-                    self.sig_show_response.emit(ai_response.spoken_text, transcript)
+                    self.sig_show_response.emit(sanitized_speech, display_query)
 
-                # 5. Visual Drawings & Simulations (Bounding boxes, circles, arrows, simulations, notes)
+                # 3. Visual Drawings & Simulations (Bounding boxes, circles, arrows, simulations, notes)
                 if ai_response.drawings and screen_captures:
                     mapped_drawings = []
                     for d in ai_response.drawings:
@@ -234,28 +253,35 @@ class CompanionManager(QObject):
                     logger.info(f"Rendering {len(mapped_drawings)} visual drawing(s) on screen.")
                     self.sig_apply_drawings.emit(mapped_drawings)
 
-                # 6. Map element pointing coordinates to global screen points & fly to element
+                # 4. Map element pointing coordinates to global screen points & fly to element
                 if ai_response.point_target and screen_captures:
                     target = ai_response.point_target
                     global_x, global_y = self._map_target_to_global_coords(target, screen_captures)
                     logger.info(f"Pointing at ({global_x}, {global_y}) - label='{target.label}'")
                     self.overlay.point_to(global_x, global_y, target.label)
 
-                # 7. Speak response via Edge Neural TTS
-                self.overlay.set_voice_state(VoiceState.RESPONDING)
-                self.status_updated.emit("Speaking...")
+                # 5. Speak response via Edge Neural TTS
+                if sanitized_speech:
+                    self.overlay.set_voice_state(VoiceState.RESPONDING)
+                    self.status_updated.emit("Speaking...")
 
-                def on_speech_done():
-                    logger.info("Speech finished.")
-                    # Fly back if pointing
-                    if self.overlay.nav_mode.value == "pointing":
-                        self.overlay.start_flying_back()
+                    def on_speech_done():
+                        logger.info("Speech finished.")
+                        # Fly back if pointing
+                        if self.overlay.nav_mode.value == "pointing":
+                            self.overlay.start_flying_back()
+                        self.overlay.set_voice_state(VoiceState.IDLE)
+                        self.status_updated.emit("Ready")
+                        # Once the agent finishes giving the response, smoothly collapse back to the thin idle bar
+                        self.sig_schedule_collapse.emit(2500)
+
+                    self.tts_engine.speak(sanitized_speech, on_complete=on_speech_done)
+                else:
                     self.overlay.set_voice_state(VoiceState.IDLE)
                     self.status_updated.emit("Ready")
-                    # Once the agent finishes giving the response, smoothly collapse back to the thin idle bar
-                    self.sig_schedule_collapse.emit(2500)
-
-                self.tts_engine.speak(ai_response.spoken_text, on_complete=on_speech_done)
+                    if self.overlay.nav_mode.value == "pointing":
+                        threading.Timer(2.5, self.overlay.start_flying_back).start()
+                    self.sig_schedule_collapse.emit(2000)
 
             except Exception as e:
                 logger.error(f"Error in pipeline: {e}")

@@ -2,6 +2,7 @@
 
 Supports:
 1. Google Gemini (aistudio.google.com) - gemini-3.5-flash-lite / gemini-3.5-flash (1,000,000 TPM Free Tier)
+   with Direct Audio input, state-of-the-art visual element grounding, and human-like peer personality.
 2. Groq Cloud (console.groq.com) - qwen/qwen3.8-27b
 3. xAI Grok (console.x.ai) - grok-2-vision-1212
 
@@ -24,47 +25,45 @@ from athena.config import get_api_key, load_config
 
 logger = logging.getLogger("athena.ai_client")
 
-ATHENA_SYSTEM_PROMPT = """you're athena, a perceptive and friendly always-on companion that lives on the user's desktop. the user just spoke to you via push-to-talk and you can see their screen(s). your reply will be spoken aloud via text-to-speech, so write the way you'd actually talk. this is an ongoing conversation — you remember everything they've said before.
+ATHENA_SYSTEM_PROMPT = """you are athena, a brilliant, warm, witty, and perceptive peer living on the user's desktop. you are not a corporate AI chatbot, a robotic assistant, or a textbook—you talk like a sharp, friendly human colleague or best friend sitting right beside them looking at the same screen.
 
-rules:
-- default to one or two sentences. be direct and dense. BUT if the user asks you to explain more, go deeper, or elaborate, then go all out — give a thorough, detailed explanation with no length limit.
-- all lowercase, casual, warm. no emojis.
-- write for the ear, not the eye. short sentences. no lists, bullet points, markdown, or formatting — just natural speech.
-- don't use abbreviations or symbols that sound weird read aloud. write "for example" not "e.g.", spell out small numbers.
-- if the user's question relates to what's on their screen, reference specific things you see.
-- if [ACTIVE APPLICATION CONTEXT] is provided, use it to know what software, tab, or file the user has open. If they have code or text highlighted, prioritize explaining or fixing that selected text.
-- if the screenshot doesn't seem relevant to their question, just answer the question directly.
-- you can help with anything — coding, writing, general knowledge, brainstorming.
-- never say "simply" or "just".
-- don't read out code verbatim. describe what the code does or what needs to change conversationally.
-- focus on giving a thorough, useful explanation. don't end with simple yes/no questions like "want me to explain more?" or "should i show you?" — those are dead ends that force the user to just say yes.
-- instead, when it fits naturally, end by planting a seed — mention something bigger or more ambitious they could try, a related concept that goes deeper, or a next-level technique that builds on what you just explained. make it something worth coming back for, not a question they'd just nod to. it's okay to not end with anything extra if the answer is complete on its own.
-- if you receive multiple screen images, the one labeled "primary focus" is where the cursor is — prioritize that one but reference others if relevant.
+rules of conversation:
+- sound completely natural, human, and conversational. no robotic phrases like "looks like you are looking at...", "as an ai...", or "how can i assist you today?".
+- never state the obvious or describe what's already on the screen unless asked. jump straight to the point with warmth and energy.
+- write for the ear, not the eye. short, rhythmic, natural sentences (1-3 sentences total). no bullet points, no numbered lists, no markdown asterisks in spoken text.
+- if they ask how to do something, explain it the way an expert friend would tell you over coffee—direct, practical, with a pro-tip.
+- speak with natural contractions ("you'll want to", "here's the trick", "let's try", "don't worry").
+- plant a clever seed or pro-tip naturally when relevant, but don't ask boring yes/no questions like "do you want me to explain more?".
 
-visual assistance (pointing, drawing, simulation):
-you have a small glowing triangle cursor and visual overlay engine that can point at things, draw bounding boxes, highlight circles, arrows, and simulate workflow paths on screen. use them whenever visual assistance would genuinely help the user navigate, debug, or learn:
-1. Pointing:
-   Fly your glowing blue cursor to point at a specific UI element: [POINT:x,y:label] or [POINT:x,y:label:screenN]
-2. Visual Drawing & Highlighting:
-   To draw a glowing box around a button, error, code, or area: [DRAW:box,x1,y1,x2,y2:label]
-   To draw a glowing circle around an icon or focal point: [DRAW:circle,x,y,radius:label]
-   To draw a directional guide arrow pointing towards an element: [DRAW:arrow,startX,startY,targetX,targetY:label]
-   To write a floating note next to an element: [WRITE:x,y:note text]
-3. Workflow Simulation:
-   If the user asks you to simulate, demonstrate, or show steps for how to perform an action:
-   [SIMULATE:x1,y1->x2,y2(->x3,y3...):workflow label]
-   This draws a connected numbered path (①, ②, ③) guiding them through the exact sequence of clicks or interactions.
+visual actions & element pointing:
+you have a small glowing triangle cursor and visual overlay engine. use them whenever visual guidance helps:
+1. Pointing: Fly your glowing blue triangle cursor to an element: [POINT:x,y:label] or [POINT:x,y:label:1]
+2. Visual Drawing:
+   - Highlight bounding box: [DRAW:box,x1,y1,x2,y2:label]
+   - Highlight circle: [DRAW:circle,cx,cy,radius:label]
+   - Directional guide arrow: [DRAW:arrow,startX,startY,targetX,targetY:label]
+   - Workflow step simulation: [SIMULATE:x1,y1->x2,y2(->x3,y3...):workflow title]
+   - On-screen note: [WRITE:x,y:note text]
+3. Coordinates are in 0..1000 normalized space ((0,0) top-left, (1000,1000) bottom-right).
+4. If no pointing or drawing is needed, append [POINT:none].
 
-coordinate space:
-coordinates are normalized to a 0..1000 integer coordinate space where (0,0) is top-left and (1000,1000) is bottom-right of the screenshot image.
-append your tag(s) at the very end of your response, AFTER your spoken text.
-if pointing or drawing wouldn't help (e.g. general knowledge question), append [POINT:none].
+response structure:
+[HEARD: <the exact words the user asked>]
+<your warm, direct, natural conversational reply>
+[POINT:x,y:label] (or visual draw tag, or [POINT:none])
 
 examples:
-- user asks how to save: "click that blue save button in the top toolbar to keep your changes. [POINT:495,37:save button]"
-- user asks to highlight an error: "that syntax error is happening right here in your import statement. [DRAW:box,120,340,580,380:syntax error]"
-- user asks how to add a file: "first click the new file button up top, then name it in the sidebar. [SIMULATE:48,110->160,240:add new file]"
-- user asks what html is: "html stands for hypertext markup language, basically the skeleton of every website. curious how it hooks into the css you're editing? [POINT:none]"
+- user asks about cooking oats on screen:
+[HEARD: how do i cook these oats]
+two cups of boiling water or milk for every cup of oats, then simmer on low for about five minutes. toss in some berries and a drizzle of honey right at the end for the best texture. [POINT:421,803:quaker oats:1]
+
+- user asks where settings is:
+[HEARD: where is settings]
+tap that little gear icon right down at the bottom left. [POINT:48,980:settings gear]
+
+- user asks what html is:
+[HEARD: what is html]
+it's basically the structural skeleton of every webpage on the internet, defining where the headings, paragraphs, and buttons live before css comes in to style it. [POINT:none]
 """
 
 # Backwards compatibility alias
@@ -93,6 +92,7 @@ class AIVisionResponse:
     spoken_text: str
     point_target: Optional[PointingTarget] = None
     drawings: List[VisualDrawing] = field(default_factory=list)
+    heard_prompt: str = ""
 
 
 # Backward compatibility alias
@@ -100,7 +100,7 @@ GrokResponse = AIVisionResponse
 
 
 class AIVisionClient:
-    """Universal multimodal AI vision client for Athena."""
+    """Universal multimodal AI vision client for Athena with Direct Audio and Visual Grounding."""
 
     def __init__(self, api_key: Optional[str] = None, model: Optional[str] = None):
         cfg = load_config()
@@ -116,7 +116,6 @@ class AIVisionClient:
         # 1. Google Gemini (aistudio.google.com) -> starts with 'AQ.' or 'AIza'
         if key.startswith("AQ.") or key.startswith("AIza") or "gemini" in self.configured_model.lower():
             endpoint = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
-            # Support gemini-3.5-flash-lite as the robust 1,000,000 TPM default
             if self.configured_model in ("gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-3.1-flash-lite"):
                 model = self.configured_model
             else:
@@ -188,8 +187,9 @@ class AIVisionClient:
         transcript: str,
         screen_captures: List[ScreenCaptureResult],
         active_context: Optional[str] = None,
+        audio_bytes: Optional[bytes] = None,
     ) -> AIVisionResponse:
-        """Send user transcript, active window context, and screen capture(s) to multimodal vision LLM."""
+        """Send user voice audio/transcript, active window context, and screen capture(s) to multimodal vision LLM."""
         if not self.api_key or self.api_key.startswith("YOUR_") or "PLACEHOLDER" in self.api_key.upper():
             return AIVisionResponse(
                 full_text="please enter your api key in the athena settings first [POINT:none]",
@@ -200,15 +200,34 @@ class AIVisionClient:
         logger.info(f"Using Provider: {provider_name} | Endpoint: {endpoint_url} | Model: {active_model}")
 
         # Build message contents
-        user_content: List[Dict[str, Any]] = [
-            {"type": "text", "text": transcript}
-        ]
+        user_content: List[Dict[str, Any]] = []
 
-        # Inject Active Application & Selected Text Context if available
+        # 1. Attach direct audio if available, otherwise textual transcript
+        if audio_bytes and len(audio_bytes) > 1000:
+            b64_audio = base64.b64encode(audio_bytes).decode("utf-8")
+            user_content.append({
+                "type": "input_audio",
+                "input_audio": {
+                    "data": b64_audio,
+                    "format": "wav"
+                }
+            })
+            prompt_instruction = (
+                "Listen directly to the user's voice audio recording and look at the screen image(s). "
+                "Structure your reply as:\n"
+                "[HEARD: <exact words the user said>]\n"
+                "<Your warm, natural, human conversational reply>\n"
+                "[POINT:x,y:label] (or visual drawing tag, or [POINT:none])"
+            )
+            user_content.append({"type": "text", "text": prompt_instruction})
+        elif transcript and transcript.strip():
+            user_content.append({"type": "text", "text": transcript.strip()})
+
+        # 2. Inject Active Application & Selected Text Context if available
         if active_context and active_context.strip():
             user_content.append({"type": "text", "text": active_context.strip()})
 
-        # Attach screenshots with image dimension labels
+        # 3. Attach screenshots with image dimension labels
         for cap in screen_captures:
             b64_img = base64.b64encode(cap.image_bytes).decode("utf-8")
             focus_label = "primary focus" if cap.is_primary else f"screen {cap.display_index}"
@@ -241,7 +260,7 @@ class AIVisionClient:
         payload = {
             "model": active_model,
             "messages": messages,
-            "temperature": 0.4,
+            "temperature": 0.5,
             "max_tokens": 450,
         }
 
@@ -254,14 +273,15 @@ class AIVisionClient:
             data = response.json()
             raw_reply = data["choices"][0]["message"].get("content", "")
 
-            # Parse pointing coordinates and visual drawings
-            spoken_text, point_target, drawings = self.parse_visual_tags(raw_reply)
+            # Parse pointing coordinates, visual drawings, and heard prompt
+            spoken_text, point_target, drawings, heard_prompt = self.parse_visual_tags(raw_reply)
 
             # Map normalized [0..1000] coordinates to screenshot pixel resolution
             point_target, drawings = self._scale_to_capture_pixels(point_target, drawings, screen_captures)
 
             # Save exchange in history
-            self.conversation_history.append((transcript, spoken_text))
+            saved_prompt = heard_prompt or transcript or "Voice Request"
+            self.conversation_history.append((saved_prompt, spoken_text))
             if len(self.conversation_history) > self.history_limit:
                 self.conversation_history.pop(0)
 
@@ -270,6 +290,7 @@ class AIVisionClient:
                 spoken_text=spoken_text,
                 point_target=point_target,
                 drawings=drawings,
+                heard_prompt=heard_prompt,
             )
 
         except httpx.HTTPStatusError as e:
@@ -346,19 +367,28 @@ class AIVisionClient:
     @classmethod
     def parse_pointing_coordinates(cls, response_text: str) -> Tuple[str, Optional[PointingTarget]]:
         """Backward-compatible pointing coordinate parser."""
-        spoken, target, _ = cls.parse_visual_tags(response_text)
+        spoken, target, _, _ = cls.parse_visual_tags(response_text)
         return spoken, target
 
     @staticmethod
-    def parse_visual_tags(response_text: str) -> Tuple[str, Optional[PointingTarget], List[VisualDrawing]]:
-        """Parse [POINT:...], [DRAW:...], [SIMULATE:...], and [WRITE:...] tags from reply text."""
+    def parse_visual_tags(response_text: str) -> Tuple[str, Optional[PointingTarget], List[VisualDrawing], str]:
+        """Parse [HEARD:...], [POINT:...], [DRAW:...], [SIMULATE:...], and [WRITE:...] tags."""
         spoken = response_text
         point_target: Optional[PointingTarget] = None
         drawings: List[VisualDrawing] = []
+        heard_prompt = ""
 
-        # 1. Parse [POINT:x,y:label] or [POINT:x,y:label:screenN]
+        # 0. Parse [HEARD: <exact words>]
+        heard_pattern = re.compile(r"\[HEARD:\s*([^\]]+)\]", re.IGNORECASE)
+        match_heard = heard_pattern.search(spoken)
+        if match_heard:
+            heard_prompt = match_heard.group(1).strip()
+            spoken = heard_pattern.sub("", spoken)
+
+        # 1. Parse [POINT:x,y:label(:screenN or :N)]
+        # Accepts :1, :screen1, :screen 1, etc.
         point_pattern = re.compile(
-            r"\[POINT:\s*(\d+)\s*,\s*(\d+)\s*[,:]\s*([^:,\]]+)(?:[,:]\s*screen(\d+))?\s*\]",
+            r"\[POINT:\s*(\d+)\s*,\s*(\d+)\s*[,:]\s*([^:,\]]+)(?:[,:]\s*(?:screen\s*)?(\d+))?\s*\]",
             re.IGNORECASE,
         )
         match_point = point_pattern.search(spoken)
@@ -370,9 +400,9 @@ class AIVisionClient:
             point_target = PointingTarget(x=x, y=y, label=label, screen_number=screen_num)
             spoken = point_pattern.sub("", spoken)
 
-        # 2. Parse [DRAW:box,x1,y1,x2,y2:label(:screenN)]
+        # 2. Parse [DRAW:box,x1,y1,x2,y2:label(:screenN or :N)]
         box_pattern = re.compile(
-            r"\[DRAW:\s*box\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*[,:]\s*([^:,\]]+)(?:[,:]\s*screen(\d+))?\s*\]",
+            r"\[DRAW:\s*box\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*[,:]\s*([^:,\]]+)(?:[,:]\s*(?:screen\s*)?(\d+))?\s*\]",
             re.IGNORECASE,
         )
         for m in box_pattern.finditer(spoken):
@@ -382,9 +412,9 @@ class AIVisionClient:
             drawings.append(VisualDrawing(kind="box", coords=[x1, y1, x2, y2], label=lbl, screen_number=s_num))
         spoken = box_pattern.sub("", spoken)
 
-        # 3. Parse [DRAW:circle,cx,cy,radius:label(:screenN)]
+        # 3. Parse [DRAW:circle,cx,cy,radius:label(:screenN or :N)]
         circle_pattern = re.compile(
-            r"\[DRAW:\s*circle\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*[,:]\s*([^:,\]]+)(?:[,:]\s*screen(\d+))?\s*\]",
+            r"\[DRAW:\s*circle\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*[,:]\s*([^:,\]]+)(?:[,:]\s*(?:screen\s*)?(\d+))?\s*\]",
             re.IGNORECASE,
         )
         for m in circle_pattern.finditer(spoken):
@@ -394,9 +424,9 @@ class AIVisionClient:
             drawings.append(VisualDrawing(kind="circle", coords=[cx, cy, r], label=lbl, screen_number=s_num))
         spoken = circle_pattern.sub("", spoken)
 
-        # 4. Parse [DRAW:arrow,x1,y1,x2,y2:label(:screenN)]
+        # 4. Parse [DRAW:arrow,x1,y1,x2,y2:label(:screenN or :N)]
         arrow_pattern = re.compile(
-            r"\[DRAW:\s*arrow\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*[,:]\s*([^:,\]]+)(?:[,:]\s*screen(\d+))?\s*\]",
+            r"\[DRAW:\s*arrow\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*[,:]\s*([^:,\]]+)(?:[,:]\s*(?:screen\s*)?(\d+))?\s*\]",
             re.IGNORECASE,
         )
         for m in arrow_pattern.finditer(spoken):
@@ -408,14 +438,13 @@ class AIVisionClient:
 
         # 5. Parse [SIMULATE:x1,y1->x2,y2(->x3,y3...):label]
         simulate_pattern = re.compile(
-            r"\[SIMULATE:\s*([0-9,\->\s]+)\s*[,:]\s*([^:,\]]+)(?:[,:]\s*screen(\d+))?\s*\]",
+            r"\[SIMULATE:\s*([0-9,\->\s]+)\s*[,:]\s*([^:,\]]+)(?:[,:]\s*(?:screen\s*)?(\d+))?\s*\]",
             re.IGNORECASE,
         )
         for m in simulate_pattern.finditer(spoken):
             path_str = m.group(1).strip()
             lbl = m.group(2).strip()
             s_num = int(m.group(3)) if m.group(3) else 1
-            # Parse nodes: "x1,y1->x2,y2"
             raw_coords = []
             for seg in path_str.split("->"):
                 parts = seg.replace(" ", "").split(",")
@@ -427,7 +456,7 @@ class AIVisionClient:
 
         # 6. Parse [WRITE:x,y:text]
         write_pattern = re.compile(
-            r"\[WRITE:\s*(\d+)\s*,\s*(\d+)\s*[,:]\s*([^:,\]]+)(?:[,:]\s*screen(\d+))?\s*\]",
+            r"\[WRITE:\s*(\d+)\s*,\s*(\d+)\s*[,:]\s*([^:,\]]+)(?:[,:]\s*(?:screen\s*)?(\d+))?\s*\]",
             re.IGNORECASE,
         )
         for m in write_pattern.finditer(spoken):
@@ -437,10 +466,12 @@ class AIVisionClient:
             drawings.append(VisualDrawing(kind="text", coords=[x, y], label=txt, screen_number=s_num))
         spoken = write_pattern.sub("", spoken)
 
-        # Remove negative control tag [POINT:none]
+        # Failsafe cleanup: strip any remaining bracketed tags or negative control [POINT:none]
+        spoken = re.sub(r"\[(?:POINT|DRAW|SIMULATE|WRITE|HEARD)[^\]]*\]", "", spoken, flags=re.IGNORECASE)
         spoken = re.sub(r"\[POINT:\s*none\s*\]", "", spoken, flags=re.IGNORECASE).strip()
+        spoken = re.sub(r"\s+", " ", spoken).strip()
 
-        return spoken.strip(), point_target, drawings
+        return spoken.strip(), point_target, drawings, heard_prompt
 
 
 # Backward compatibility alias

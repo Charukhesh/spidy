@@ -226,6 +226,19 @@ class AudioRecorder:
             logger.error(f"Failed to save WAV file: {e}")
             return False
 
+    @staticmethod
+    def pcm_to_wav_bytes(pcm_data: bytes, sample_rate: int = 16000, channels: int = 1, bytes_per_sample: int = 2) -> bytes:
+        """Convert raw PCM bytes directly into a complete in-memory WAV byte string."""
+        import io
+        import wave
+        buf = io.BytesIO()
+        with wave.open(buf, "wb") as wf:
+            wf.setnchannels(channels)
+            wf.setsampwidth(bytes_per_sample)
+            wf.setframerate(sample_rate)
+            wf.writeframes(pcm_data)
+        return buf.getvalue()
+
     def _calculate_audio_level(self, raw_pcm: bytes):
         """Compute RMS audio volume normalized 0.0 to 1.0."""
         count = len(raw_pcm) // 2

@@ -165,6 +165,7 @@ class TestEverydayPowerFeatures(unittest.TestCase):
         """Verify parsing of visual drawing tags (box, circle, arrow, simulate, text)."""
         client = AIVisionClient(api_key="AQ.MOCK_KEY")
         sample_response = (
+            "[HEARD: show me how to checkout] "
             "here is how you do it. "
             "[DRAW:box,100,200,400,300:login box] "
             "[DRAW:circle,500,500,50:target icon] "
@@ -174,10 +175,11 @@ class TestEverydayPowerFeatures(unittest.TestCase):
             "[POINT:250,250:main button]"
         )
 
-        spoken, target, drawings = client.parse_visual_tags(sample_response)
+        spoken, target, drawings, heard_prompt = client.parse_visual_tags(sample_response)
 
-        # Check spoken text has tags stripped
+        # Check spoken text has tags stripped and heard prompt extracted
         self.assertEqual(spoken, "here is how you do it.")
+        self.assertEqual(heard_prompt, "show me how to checkout")
         self.assertIsNotNone(target)
         self.assertEqual(target.x, 250)
         self.assertEqual(target.y, 250)
