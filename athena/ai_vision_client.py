@@ -22,6 +22,7 @@ import httpx
 
 from athena.screen_capture import ScreenCaptureResult
 from athena.config import get_api_key, load_config
+from athena.memory_store import memory_store
 
 logger = logging.getLogger("athena.ai_client")
 
@@ -59,6 +60,18 @@ web search verification:
   example:
   [HEARD: who won the match yesterday]
   it looks like the match was played yesterday evening, but let me check the final score. want me to check the web for that? [OFFER_SEARCH: match score yesterday] [POINT:none]
+
+desktop actions & local control:
+you have hands-on local OS control. use these action tags whenever requested:
+1. Launching Apps/Folders: [ACTION:launch:spotify], [ACTION:launch:code], [ACTION:launch:downloads], [ACTION:launch:notepad]
+2. Window Snapping & Layout: [ACTION:window:snap_left], [ACTION:window:snap_right], [ACTION:window:maximize], [ACTION:window:minimize_others]
+3. Clipboard Operations: [ACTION:clipboard:<clean transformed text to set on clipboard>]
+4. Visual Scratchpad & OCR Extraction: [ACTION:ocr:plain] (uncopyable text to clipboard), [ACTION:ocr:table] (table to markdown/csv), [ACTION:ocr:mermaid] (diagram to mermaid code)
+
+persistent long-term memory:
+- when the user shares a personal preference, project context, or fact (e.g. "remember that I prefer type annotations in Python", "I am working on Project Apollo"):
+  acknowledge it naturally and append: [REMEMBER:preference:coding_style:prefers type annotations in Python]
+  categories: preference, project, fact, note
 
 response structure:
 [HEARD: <the exact words the user asked>]
@@ -115,6 +128,9 @@ class AIVisionResponse:
     heard_prompt: str = ""
     trace_curve: Optional[TraceCurveTarget] = None
     offer_search: str = ""
+    action_type: str = ""
+    action_arg: str = ""
+    remember_item: Optional[Tuple[str, str, str]] = None
 
 
 # Backward compatibility alias
@@ -249,6 +265,11 @@ class AIVisionClient:
         if active_context and active_context.strip():
             user_content.append({"type": "text", "text": active_context.strip()})
 
+        # 2.5 Inject Relevant Long-Term Memories if available
+        mem_context = memory_store.format_memories_for_prompt(transcript or "")
+        if mem_context:
+            user_content.append({"type": "text", "text": mem_context})
+
         # 3. Attach screenshots with image dimension labels
         for cap in screen_captures:
             b64_img = base64.b64encode(cap.image_bytes).decode("utf-8")
@@ -295,8 +316,8 @@ class AIVisionClient:
             data = response.json()
             raw_reply = data["choices"][0]["message"].get("content", "")
 
-            # Parse pointing coordinates, visual drawings, heard prompt, curve tracing, and web search offer
-            spoken_text, point_target, drawings, heard_prompt, trace_curve, offer_search = self.parse_visual_tags(raw_reply)
+            # Parse pointing coordinates, visual drawings, heard prompt, curve tracing, web search, action, and remember
+            spoken_text, point_target, drawings, heard_prompt, trace_curve, offer_search, action_type, action_arg, remember_item = self.parse_visual_tags(raw_reply)
 
             # Map normalized [0..1000] coordinates to screenshot pixel resolution
             point_target, drawings = self._scale_to_capture_pixels(point_target, drawings, screen_captures)
@@ -315,6 +336,9 @@ class AIVisionClient:
                 heard_prompt=heard_prompt,
                 trace_curve=trace_curve,
                 offer_search=offer_search,
+                action_type=action_type,
+                action_arg=action_arg,
+                remember_item=remember_item,
             )
 
         except httpx.HTTPStatusError as e:
@@ -397,14 +421,17 @@ class AIVisionClient:
     @staticmethod
     def parse_visual_tags(
         response_text: str,
-    ) -> Tuple[str, Optional[PointingTarget], List[VisualDrawing], str, Optional[TraceCurveTarget], str]:
-        """Parse [HEARD:...], [POINT:...], [DRAW:...], [SIMULATE:...], [WRITE:...], [TRACE:...], and [OFFER_SEARCH:...]."""
+    ) -> Tuple[str, Optional[PointingTarget], List[VisualDrawing], str, Optional[TraceCurveTarget], str, str, str, Optional[Tuple[str, str, str]]]:
+        """Parse visual tags, actions, memories, heard prompts, and drawings."""
         spoken = response_text
         point_target: Optional[PointingTarget] = None
         drawings: List[VisualDrawing] = []
         heard_prompt = ""
         trace_curve: Optional[TraceCurveTarget] = None
         offer_search = ""
+        action_type = ""
+        action_arg = ""
+        remember_item = None
 
         # 0. Parse [HEARD: <exact words>]
         heard_pattern = re.compile(r"\[HEARD:\s*([^\]]+)\]", re.IGNORECASE)
@@ -513,9 +540,24 @@ class AIVisionClient:
             offer_search = match_search.group(1).strip()
             spoken = search_pattern.sub("", spoken)
 
+        # 9. Parse [ACTION:type:arg]
+        action_pattern = re.compile(r"\[ACTION:\s*([a-zA-Z0-9_\-]+)\s*[,:]\s*([^\]]+)\]", re.IGNORECASE)
+        match_action = action_pattern.search(spoken)
+        if match_action:
+            action_type = match_action.group(1).strip()
+            action_arg = match_action.group(2).strip()
+            spoken = action_pattern.sub("", spoken)
+
+        # 10. Parse [REMEMBER:category:key:content]
+        rem_pattern = re.compile(r"\[REMEMBER:\s*([^:,\]]+)\s*[,:]\s*([^:,\]]+)\s*[,:]\s*([^\]]+)\]", re.IGNORECASE)
+        match_rem = rem_pattern.search(spoken)
+        if match_rem:
+            remember_item = (match_rem.group(1).strip(), match_rem.group(2).strip(), match_rem.group(3).strip())
+            spoken = rem_pattern.sub("", spoken)
+
         # Failsafe cleanup: strip any remaining bracketed tags or negative control [POINT:none]
         spoken = re.sub(
-            r"\[(?:POINT|DRAW|SIMULATE|WRITE|HEARD|TRACE|OFFER_SEARCH)[^\]]*\]",
+            r"\[(?:POINT|DRAW|SIMULATE|WRITE|HEARD|TRACE|OFFER_SEARCH|ACTION|REMEMBER)[^\]]*\]",
             "",
             spoken,
             flags=re.IGNORECASE,
@@ -523,7 +565,7 @@ class AIVisionClient:
         spoken = re.sub(r"\[POINT:\s*none\s*\]", "", spoken, flags=re.IGNORECASE).strip()
         spoken = re.sub(r"\s+", " ", spoken).strip()
 
-        return spoken.strip(), point_target, drawings, heard_prompt, trace_curve, offer_search
+        return spoken.strip(), point_target, drawings, heard_prompt, trace_curve, offer_search, action_type, action_arg, remember_item
 
 
 # Backward compatibility alias

@@ -29,6 +29,9 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     "cursor_color": "#3380FF",
     "conversation_history_limit": 10,
     "system_prompt_rules": True,
+    "wake_word_enabled": False,
+    "memory_enabled": True,
+    "desktop_actions_enabled": True,
 }
 
 

@@ -36,6 +36,10 @@ from athena.context_inspector import inspector
 from athena.top_bar_hud import TopBarGlassHUD
 from athena.curve_generator import CurveGenerator
 from athena.web_search import web_search
+from athena.desktop_actions import desktop_actions
+from athena.memory_store import memory_store
+from athena.visual_scratchpad import scratchpad
+from athena.wake_word import WakeWordDetector
 
 logger = logging.getLogger("athena.companion")
 
@@ -96,8 +100,19 @@ class CompanionManager(QObject):
         self._stop_hotkey_thread = threading.Event()
         self.pending_search_query: Optional[str] = None
 
+        # Optional Hands-Free Wake Word Detector
+        self.wake_detector = WakeWordDetector(enabled=self.config.get("wake_word_enabled", False))
+        self.wake_detector.wake_word_detected.connect(self._on_wake_word_triggered)
+        if self.config.get("wake_word_enabled", False):
+            self.wake_detector.start()
+
         # Start hardware hotkey polling thread (Ctrl + Alt)
         self._start_hotkey_listener()
+
+    def _on_wake_word_triggered(self):
+        """Hands-free wake word triggered."""
+        logger.info("Wake word heard -> Listening...")
+        self._on_hotkey_pressed()
 
     def _start_hotkey_listener(self):
         """Hardware-level hotkey polling thread using GetAsyncKeyState.
@@ -285,6 +300,47 @@ class CompanionManager(QObject):
                 if ai_response.offer_search:
                     self.pending_search_query = ai_response.offer_search
                     logger.info(f"Athena offered web search: '{self.pending_search_query}'")
+
+                # 2.2 Handle Desktop Actions (launch, window, clipboard, ocr)
+                if ai_response.action_type and self.config.get("desktop_actions_enabled", True):
+                    act_t = ai_response.action_type
+                    act_a = ai_response.action_arg
+
+                    if act_t == "ocr" and screen_captures:
+                        from PyQt5.QtGui import QCursor
+                        m_pos = QCursor.pos()
+                        crop_bytes = scratchpad.crop_region_around_point(screen_captures, m_pos.x(), m_pos.y())
+                        if crop_bytes:
+                            ocr_crop_result = ScreenCaptureResult(
+                                image_bytes=crop_bytes,
+                                width=480,
+                                height=320,
+                                left=m_pos.x() - 240,
+                                top=m_pos.y() - 160,
+                                display_index=1,
+                                is_primary=True,
+                            )
+                            ocr_prompt = f"Extract all visible text or structured data in this image crop as {act_a}. Return only the exact extracted text."
+                            ocr_res = self.ai_client.query(transcript=ocr_prompt, screen_captures=[ocr_crop_result])
+                            if ocr_res.spoken_text:
+                                scratchpad.load_extracted_to_clipboard(ocr_res.spoken_text)
+                    else:
+                        success, act_msg = desktop_actions.execute_action(act_t, act_a)
+                        logger.info(f"Desktop action [{act_t}: {act_a}] -> {success}: {act_msg}")
+
+                # 2.3 Store Persistent Memory if requested
+                if ai_response.remember_item and self.config.get("memory_enabled", True):
+                    cat, k, content = ai_response.remember_item
+                    memory_store.store_memory(cat, k, content)
+
+                # 2.4 Log Session Activity for Multi-Day Continuity
+                if self.config.get("memory_enabled", True):
+                    memory_store.log_interaction(
+                        app_name=inspector.capture_active_context(include_selected_text=False).app_name or "Desktop",
+                        window_title=inspector.capture_active_context(include_selected_text=False).window_title or "",
+                        user_prompt=display_query,
+                        assistant_reply=ai_response.spoken_text,
+                    )
 
                 # Clean speech text to guarantee zero tags are read aloud
                 sanitized_speech = self._sanitize_speech_text(ai_response.spoken_text)

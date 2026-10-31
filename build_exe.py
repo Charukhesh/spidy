@@ -40,7 +40,7 @@ a = Analysis(
     hiddenimports=[
         'PyQt5', 'PyQt5.QtCore', 'PyQt5.QtGui', 'PyQt5.QtWidgets',
         'faster_whisper', 'ctranslate2', 'edge_tts', 'mss', 'httpx',
-        'PIL', 'winsound', 'psutil'
+        'PIL', 'winsound', 'psutil', 'sqlite3'
     ],
     hookspath=[],
     hooksconfig={{}},

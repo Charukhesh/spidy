@@ -167,7 +167,7 @@ class TestEverydayPowerFeatures(unittest.TestCase):
             "[POINT:250,250:main button]"
         )
 
-        spoken, target, drawings, heard_prompt, trace_curve, offer_search = client.parse_visual_tags(sample_response)
+        spoken, target, drawings, heard_prompt, trace_curve, offer_search, *rest = client.parse_visual_tags(sample_response)
 
         # Check spoken text has tags stripped and heard prompt extracted
         self.assertEqual(spoken, "here is how you do it.")
