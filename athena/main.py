@@ -61,8 +61,8 @@ def main():
 
     logging.info("=" * 60)
     logging.info("Athena Everyday Desktop Companion is active!")
-    logging.info("Hold 'Ctrl + Shift' to speak, release to send.")
-    logging.info("Click the blue triangle tray icon to configure your Vision AI API key.")
+    logging.info("Hold 'Ctrl + Shift' for Visual AI Assistant, or 'Ctrl + Alt' for Voice Dictation.")
+    logging.info("Click the blue triangle tray icon to open Athena Settings.")
     logging.info("=" * 60)
 
     # Start Qt event loop

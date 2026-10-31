@@ -30,6 +30,7 @@ rules:
 - write for the ear, not the eye. short sentences. no lists, bullet points, markdown, or formatting — just natural speech.
 - don't use abbreviations or symbols that sound weird read aloud. write "for example" not "e.g.", spell out small numbers.
 - if the user's question relates to what's on their screen, reference specific things you see.
+- if [ACTIVE APPLICATION CONTEXT] is provided, use it to know what software, tab, or file the user has open. If they have code or text highlighted, prioritize explaining or fixing that selected text.
 - if the screenshot doesn't seem relevant to their question, just answer the question directly.
 - you can help with anything — coding, writing, general knowledge, brainstorming.
 - never say "simply" or "just".
@@ -177,8 +178,9 @@ class AIVisionClient:
         self,
         transcript: str,
         screen_captures: List[ScreenCaptureResult],
+        active_context: Optional[str] = None,
     ) -> AIVisionResponse:
-        """Send user transcript and screen capture(s) to multimodal vision LLM."""
+        """Send user transcript, active window context, and screen capture(s) to multimodal vision LLM."""
         if not self.api_key or self.api_key.startswith("YOUR_") or "PLACEHOLDER" in self.api_key.upper():
             return AIVisionResponse(
                 full_text="please enter your api key in the athena settings first [POINT:none]",
@@ -192,6 +194,10 @@ class AIVisionClient:
         user_content: List[Dict[str, Any]] = [
             {"type": "text", "text": transcript}
         ]
+
+        # Inject Active Application & Selected Text Context if available
+        if active_context and active_context.strip():
+            user_content.append({"type": "text", "text": active_context.strip()})
 
         # Attach screenshots with image dimension labels
         for cap in screen_captures:

@@ -1,14 +1,19 @@
-"""Companion Control Panel for Clicky Windows.
+"""Companion Control Panel for Athena Everyday Desktop Companion.
 
-Faithful recreation of CompanionPanelView.swift:
-- Width 320px
-- Minimal dark aesthetic (#16161A, border #2A2A30)
+Faithful recreation and enhancement of CompanionPanelView.swift:
+- Width 330px
+- Minimal dark aesthetic (#141418, border #282830)
 - Header with animated glowing status dot
-- Push-to-Talk instructions capsule
-- Grok API key setup row with toggle visibility
-- Vision model selector (grok-2-vision-1212)
+- Dual Push-to-Talk instructions:
+  - Visual Assistant (Hold Ctrl + Shift)
+  - Global Dictation into active app (Hold Ctrl + Alt)
+- Google Gemini / Groq / xAI API key setup row with toggle visibility
+- Model selector (gemini-3.5-flash / auto)
 - Edge Neural TTS voice selector
-- Hotkey configuration picker
+- Everyday Power Pack Toggles:
+  - Interactive Sound Cues (with Test button)
+  - Deep Context Awareness (App + Window + Highlighted text)
+  - Floating Answer HUD Card (translucent card with 1-click copy)
 - Test Pointing Demo button
 - Clean quit button
 """
@@ -22,6 +27,7 @@ from PyQt5.QtWidgets import (
     QPushButton,
     QLineEdit,
     QComboBox,
+    QCheckBox,
     QFrame,
     QGraphicsDropShadowEffect,
 )
@@ -37,8 +43,9 @@ from athena.config import (
     set_grok_api_key,
 )
 from athena.ai_vision_client import AIVisionClient, GrokClient
+from athena.sound_effects import sounds
 
-CLICKY_BLUE = "#3380FF"
+ATHENA_BLUE = "#3380FF"
 
 
 class CompanionPanel(QWidget):
@@ -55,7 +62,7 @@ class CompanionPanel(QWidget):
             Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.SubWindow
         )
         self.setAttribute(Qt.WA_TranslucentBackground, True)
-        self.setFixedWidth(320)
+        self.setFixedWidth(330)
 
         self._build_ui()
 
@@ -66,12 +73,13 @@ class CompanionPanel(QWidget):
         # Container card with dark aesthetic
         self.container = QFrame(self)
         self.container.setStyleSheet("""
-            QFrame {
+            QFrame#cardFrame {
                 background-color: #141418;
                 border: 1px solid #282830;
                 border-radius: 12px;
             }
         """)
+        self.container.setObjectName("cardFrame")
 
         # Drop shadow
         shadow = QGraphicsDropShadowEffect(self)
@@ -82,9 +90,9 @@ class CompanionPanel(QWidget):
 
         layout = QVBoxLayout(self.container)
         layout.setContentsMargins(16, 14, 16, 14)
-        layout.setSpacing(12)
+        layout.setSpacing(10)
 
-        # 1. Header (Status dot, Clicky title, Close)
+        # 1. Header (Status dot, Athena title, Close)
         header = QHBoxLayout()
         header.setSpacing(8)
 
@@ -127,7 +135,7 @@ class CompanionPanel(QWidget):
         # Divider
         layout.addWidget(self._make_divider())
 
-        # 2. Push-to-Talk Instruction Capsule
+        # 2. Push-to-Talk Instruction Capsules
         instruction_box = QFrame()
         instruction_box.setStyleSheet("""
             QFrame {
@@ -136,18 +144,33 @@ class CompanionPanel(QWidget):
                 border-radius: 8px;
             }
         """)
-        inst_layout = QHBoxLayout(instruction_box)
-        inst_layout.setContentsMargins(12, 10, 12, 10)
+        inst_layout = QVBoxLayout(instruction_box)
+        inst_layout.setContentsMargins(10, 8, 10, 8)
+        inst_layout.setSpacing(6)
 
-        inst_icon = QLabel("🎙️")
-        inst_icon.setStyleSheet("border: none; font-size: 14px;")
-        inst_layout.addWidget(inst_icon)
+        # Assistant Row
+        row1 = QHBoxLayout()
+        icon1 = QLabel("👁️")
+        icon1.setStyleSheet("border: none; font-size: 13px;")
+        t1 = QLabel("Hold Ctrl + Shift: Visual Assistant")
+        t1.setFont(QFont("Segoe UI", 9, QFont.DemiBold))
+        t1.setStyleSheet("color: #E2E2E8; border: none;")
+        row1.addWidget(icon1)
+        row1.addWidget(t1)
+        row1.addStretch()
+        inst_layout.addLayout(row1)
 
-        inst_text = QLabel("Hold Ctrl + Shift to talk.")
-        inst_text.setFont(QFont("Segoe UI", 9, QFont.DemiBold))
-        inst_text.setStyleSheet("color: #E2E2E8; border: none;")
-        inst_layout.addWidget(inst_text)
-        inst_layout.addStretch()
+        # Dictation Row
+        row2 = QHBoxLayout()
+        icon2 = QLabel("🎙️")
+        icon2.setStyleSheet("border: none; font-size: 13px;")
+        t2 = QLabel("Hold Ctrl + Alt: Voice Dictation")
+        t2.setFont(QFont("Segoe UI", 9, QFont.DemiBold))
+        t2.setStyleSheet("color: #38BDF8; border: none;")
+        row2.addWidget(icon2)
+        row2.addWidget(t2)
+        row2.addStretch()
+        inst_layout.addLayout(row2)
 
         layout.addWidget(instruction_box)
 
@@ -159,7 +182,7 @@ class CompanionPanel(QWidget):
 
         key_row = QHBoxLayout()
         self.key_input = QLineEdit()
-        self.key_input.setPlaceholderText("AIzaSy... (Gemini 2.0 Flash) or gsk_...")
+        self.key_input.setPlaceholderText("Paste Gemini or Groq API key...")
         self.key_input.setEchoMode(QLineEdit.Password)
         self.key_input.setText(get_grok_api_key())
         self.key_input.setStyleSheet("""
@@ -224,7 +247,7 @@ class CompanionPanel(QWidget):
         self._update_provider_hint(self.key_input.text())
         layout.addWidget(self.provider_hint)
 
-        # 4. Settings Selectors
+        # 4. Settings Selectors (Model & Voice)
         settings_row = QHBoxLayout()
 
         # Model Picker
@@ -242,7 +265,6 @@ class CompanionPanel(QWidget):
             "grok-2-vision-1212"
         ])
         curr_m = self.config.get("grok_model", "auto")
-        # Match current config or fallback
         found = False
         for i in range(self.model_combo.count()):
             if curr_m in self.model_combo.itemText(i):
@@ -284,15 +306,64 @@ class CompanionPanel(QWidget):
 
         layout.addLayout(settings_row)
 
-        # 5. Onboarding Demo Button
-        demo_btn = QPushButton("✨ Test Pointing Demo")
+        # Divider
+        layout.addWidget(self._make_divider())
+
+        # 5. Everyday Power Features Toggles
+        feat_lbl = QLabel("Everyday Power Pack")
+        feat_lbl.setFont(QFont("Segoe UI", 8, QFont.Bold))
+        feat_lbl.setStyleSheet("color: #8E8E98; border: none;")
+        layout.addWidget(feat_lbl)
+
+        self.chk_sound = QCheckBox("🔊 Interactive Sound Cues")
+        self.chk_sound.setChecked(self.config.get("sound_effects_enabled", True))
+        self.chk_sound.setStyleSheet(self._checkbox_style())
+        self.chk_sound.toggled.connect(self._on_toggle_sound)
+
+        self.chk_context = QCheckBox("🧠 Active Window Context Awareness")
+        self.chk_context.setChecked(self.config.get("context_awareness", True))
+        self.chk_context.setStyleSheet(self._checkbox_style())
+        self.chk_context.toggled.connect(self._on_toggle_context)
+
+        self.chk_hud = QCheckBox("💬 Floating Answer HUD Card")
+        self.chk_hud.setChecked(self.config.get("floating_card_enabled", True))
+        self.chk_hud.setStyleSheet(self._checkbox_style())
+        self.chk_hud.toggled.connect(self._on_toggle_hud)
+
+        layout.addWidget(self.chk_sound)
+        layout.addWidget(self.chk_context)
+        layout.addWidget(self.chk_hud)
+
+        # Test Buttons Row (Sound Chime + Pointing Demo)
+        btn_row = QHBoxLayout()
+
+        sound_test_btn = QPushButton("🔔 Test Chimes")
+        sound_test_btn.setStyleSheet("""
+            QPushButton {
+                background: #242430;
+                color: #A0C8FF;
+                border: 1px solid #334466;
+                border-radius: 6px;
+                padding: 6px;
+                font-size: 11px;
+                font-weight: 600;
+            }
+            QPushButton:hover {
+                background: #334466;
+                color: #FFFFFF;
+            }
+        """)
+        sound_test_btn.clicked.connect(self._test_sound_cues)
+        btn_row.addWidget(sound_test_btn)
+
+        demo_btn = QPushButton("✨ Pointing Demo")
         demo_btn.setStyleSheet("""
             QPushButton {
                 background: #242430;
                 color: #3380FF;
                 border: 1px solid #3380FF;
                 border-radius: 6px;
-                padding: 7px;
+                padding: 6px;
                 font-size: 11px;
                 font-weight: 600;
             }
@@ -302,7 +373,9 @@ class CompanionPanel(QWidget):
             }
         """)
         demo_btn.clicked.connect(self.demo_requested.emit)
-        layout.addWidget(demo_btn)
+        btn_row.addWidget(demo_btn)
+
+        layout.addLayout(btn_row)
 
         layout.addWidget(self._make_divider())
 
@@ -310,7 +383,7 @@ class CompanionPanel(QWidget):
         footer = QHBoxLayout()
         footer.addStretch()
 
-        quit_btn = QPushButton("Quit Clicky")
+        quit_btn = QPushButton("Quit Athena")
         quit_btn.setStyleSheet("""
             QPushButton {
                 background: transparent;
@@ -335,6 +408,27 @@ class CompanionPanel(QWidget):
         line.setStyleSheet("border: none; border-top: 1px solid #24242C;")
         return line
 
+    def _checkbox_style(self) -> str:
+        return """
+            QCheckBox {
+                color: #D8D8E4;
+                font-size: 11px;
+                spacing: 6px;
+                border: none;
+            }
+            QCheckBox::indicator {
+                width: 14px;
+                height: 14px;
+                border-radius: 3px;
+                border: 1px solid #444455;
+                background: #1C1C24;
+            }
+            QCheckBox::indicator:checked {
+                background: #3380FF;
+                border: 1px solid #3380FF;
+            }
+        """
+
     def _combo_style(self) -> str:
         return """
             QComboBox {
@@ -351,6 +445,25 @@ class CompanionPanel(QWidget):
                 selection-background-color: #3380FF;
             }
         """
+
+    def _on_toggle_sound(self, checked: bool):
+        cfg = load_config()
+        cfg["sound_effects_enabled"] = checked
+        save_config(cfg)
+
+    def _on_toggle_context(self, checked: bool):
+        cfg = load_config()
+        cfg["context_awareness"] = checked
+        save_config(cfg)
+
+    def _on_toggle_hud(self, checked: bool):
+        cfg = load_config()
+        cfg["floating_card_enabled"] = checked
+        save_config(cfg)
+
+    def _test_sound_cues(self):
+        sounds.play_activate()
+        QTimer.singleShot(250, sounds.play_arrival)
 
     def _on_key_text_changed(self, text: str):
         self._update_provider_hint(text)
@@ -430,4 +543,3 @@ class CompanionPanel(QWidget):
         self.show()
         self.raise_()
         self.activateWindow()
-

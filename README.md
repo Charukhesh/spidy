@@ -16,6 +16,10 @@ Athena lives transparently on your screen, follows your cursor with fluid spring
 ## ✨ Key Capabilities
 
 * **Push-to-Talk Screen Awareness**: Hold `Ctrl + Shift` anywhere in Windows to speak. Athena records your microphone, grabs multi-monitor screenshots, transcribes speech locally, and answers in under 1.5 seconds.
+* **Global Voice Dictation Mode**: Hold `Ctrl + Alt` anywhere in Windows to voice-type directly into any focused application (VS Code, Chrome, Slack, Word, Terminal, etc.) via local Whisper STT. Text is cleanly injected without corrupting clipboard history.
+* **Deep Context Awareness**: Athena automatically inspects the active foreground application (e.g. `Visual Studio Code`, `Chrome`), active window/document title, and currently highlighted/selected text, feeding it to Gemini for situational accuracy.
+* **Interactive Modern Audio Cues**: Pleasant zero-latency audio chimes on hotkey activation, thinking swell, target pointing arrival, and dictation start/stop (fully toggleable in settings).
+* **Floating Answer & History HUD**: A sleek translucent glassmorphic card displayed near the bottom-right of the screen showing spoken answers with a 1-click "Copy Answer" button, 8s auto-fade, and automatic pause on mouse hover.
 * **Autonomous Element Pointing**: When asked how to do something, find a button, or navigate an app, Athena’s glowing blue triangle cursor detaches, performs a smooth quadratic Bézier flight animation, and points directly at the relevant element with an anchor label.
 * **Dual-Display & Multi-Monitor Support**: Native coordinate mapping across multi-monitor setups, including secondary displays positioned with negative virtual coordinates (`DISPLAY1` at `-1920, -71`).
 * **100% Free Multimodal Vision**:

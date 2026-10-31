@@ -11,11 +11,15 @@ Athena-Everyday-Agent/
 ├── athena/
 │   ├── __init__.py              # Package initializer
 │   ├── main.py                  # High-DPI PyQt5 entry point & lifecycle
-│   ├── companion_manager.py     # Pipeline coordinator & hotkey polling thread
-│   ├── companion_panel.py       # Modern dark 320px settings panel & test suite
+│   ├── companion_manager.py     # Pipeline coordinator & dual hotkey polling thread
+│   ├── companion_panel.py       # Modern dark 330px settings panel & test suite
 │   ├── cursor_overlay.py        # Transparent click-through overlay with Bézier flight
 │   ├── ai_vision_client.py      # Universal Gemini / Groq / Grok multimodal client
 │   ├── grok_client.py           # Compatibility wrapper
+│   ├── dictation_manager.py     # Global push-to-talk voice typing & text injection
+│   ├── context_inspector.py     # Active foreground window, process, & selected text
+│   ├── sound_effects.py         # Zero-latency in-memory modern chimes audio engine
+│   ├── floating_history_overlay.py # Glassmorphic answer HUD with 1-click copy & hover pause
 │   ├── audio_recorder.py        # Pure ctypes winmm.dll low-latency PCM recorder
 │   ├── screen_capture.py        # Multi-monitor screen capture engine (MSS / PIL / GDI)
 │   ├── stt_engine.py            # Faster-Whisper in-memory float32 NumPy transcriber
@@ -123,4 +127,41 @@ This is passed directly into `WhisperModel.transcribe(audio_array)`, achieving i
 | `AQ.` or `AIza...` | `generativelanguage.googleapis.com` | `gemini-3.5-flash` | **1,000,000 TPM** (1.5k requests/day free) |
 | `gsk_...` | `api.groq.com/openai/v1` | `qwen/qwen3.8-27b` | Free Tier LPU (~15,000 TPM) |
 | `xai-...` | `api.x.ai/v1` | `grok-2-vision-1212` | Paid xAI Credits |
+
+---
+
+## 7. Everyday Power Pack Subsystems
+
+### 1. Global Voice Dictation (`athena/dictation_manager.py`)
+* Activated by holding `Ctrl + Alt`.
+* Displays a compact floating status pill (`🎙️ Dictating...`) above the mouse cursor.
+* On release, audio is transcribed using Faster-Whisper, and the resulting text is directly injected into the active foreground window via simulated `Ctrl + V` paste.
+* Prior user clipboard data is automatically captured and restored after a 200ms delay, guaranteeing non-destructive voice typing without losing clipboard items.
+
+### 2. Deep Context Awareness (`athena/context_inspector.py`)
+* Leverages Win32 `GetForegroundWindow()`, `GetWindowTextW()`, and process query APIs.
+* Inspects active application process executable and maps to user-friendly titles (e.g. `Code.exe` -> `Visual Studio Code`).
+* Safe highlighted text capture: non-destructively probes selected text in the active window by sending `Ctrl + C` against a temporary probe marker and restoring prior clipboard content.
+* Injects formatted context into Gemini prompt:
+  ```
+  [ACTIVE APPLICATION CONTEXT]
+  Foreground App: Visual Studio Code (Code.exe)
+  Window Title: main.py - Athena Agent
+  Highlighted/Selected Text: ...
+  ```
+
+### 3. Modern Sound Cues Engine (`athena/sound_effects.py`)
+* Zero-latency in-memory 16-bit PCM WAV audio synthesizer and player.
+* Employs native Windows WASAPI/DirectSound via `winsound.PlaySound` (SND_MEMORY | SND_ASYNC).
+* Smooth musical chimes:
+  * **Activate**: Rising soft two-tone chime ($587\text{ Hz} \to 880\text{ Hz}$).
+  * **Thinking**: Gentle ambient harmonic pulse ($523\text{ Hz} + 659\text{ Hz}$).
+  * **Target Arrival**: Crystal chime on pointing landing ($880\text{ Hz} \to 1046\text{ Hz} \to 1318\text{ Hz}$).
+  * **Dictation Start/Stop**: Soft tactile pops ($440\text{ Hz} \leftrightarrow 659\text{ Hz}$).
+
+### 4. Floating Answer & History HUD (`athena/floating_history_overlay.py`)
+* Translucent glassmorphic acrylic HUD positioned in the bottom-right corner of the primary display.
+* Displays latest spoken AI answers and user queries.
+* Features a 1-click **"📋 Copy Answer"** button.
+* Smooth 8-second auto-fade countdown that automatically pauses when the user's mouse hovers over the card, resuming with a 3-second delay on mouse leave.
 

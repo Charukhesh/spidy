@@ -11,6 +11,9 @@ def build():
     root_dir = Path(__file__).resolve().parent
     main_script = root_dir / "run_athena.py"
 
+    import shutil
+    shutil.rmtree(root_dir / "dist" / "athena", ignore_errors=True)
+
     cmd = [
         sys.executable,
         "-m",
@@ -19,6 +22,7 @@ def build():
         "--noconsole",
         "--onedir",
         "--clean",
+        "--noconfirm",
         "--add-data", f"{root_dir / 'athena'}:athena",
         "--hidden-import", "PyQt5",
         "--hidden-import", "PyQt5.QtCore",
@@ -30,6 +34,8 @@ def build():
         "--hidden-import", "mss",
         "--hidden-import", "httpx",
         "--hidden-import", "PIL",
+        "--hidden-import", "winsound",
+        "--hidden-import", "psutil",
         str(main_script)
     ]
 

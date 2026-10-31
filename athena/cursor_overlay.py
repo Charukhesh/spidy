@@ -38,6 +38,7 @@ from PyQt5.QtGui import (
     QFontMetrics,
     QCursor,
 )
+from athena.sound_effects import sounds
 from PyQt5.QtWidgets import QWidget, QApplication
 
 # Windows API Constants for click-through transparent overlay
@@ -287,6 +288,7 @@ class ClickyCursorOverlay(QWidget):
                     )
                     self.bubble_scale = 0.5
                     self.bubble_opacity = 1.0
+                    sounds.play_arrival()
                 else:
                     self.nav_mode = NavigationMode.FOLLOWING_CURSOR
                     self.triangle_rotation = -35.0
