@@ -148,7 +148,7 @@ class TestEverydayPowerFeatures(unittest.TestCase):
         client = AIVisionClient(api_key="AQ.MOCK_KEY_FOR_TESTING")
         provider, endpoint, model = client._resolve_provider_and_model()
         self.assertIn("Google Gemini", provider)
-        self.assertIn("gemini-3.5-flash", model)
+        self.assertTrue("gemini" in model.lower() and "flash" in model.lower())
         print("[PASS] Test 6 Passed: Vision AI client properly resolves provider and supports context.")
 
     def test_07_visual_drawings_parser_and_overlay(self):

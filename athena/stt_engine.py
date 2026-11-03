@@ -45,8 +45,7 @@ def get_whisper_model(model_size: str = "base.en"):
 class SpeechToText:
     def __init__(self, model_size: str = "base.en"):
         self.model_size = model_size
-        # Pre-warm model in background thread
-        threading.Thread(target=get_whisper_model, args=(self.model_size,), daemon=True).start()
+        # Lazy-loaded on first local transcription call to save ~250MB RAM and prevent startup CPU spikes.
 
     def transcribe_pcm(self, raw_pcm: bytes) -> str:
         """Transcribe 16kHz 16-bit Mono PCM bytes directly via numpy array."""

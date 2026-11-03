@@ -39,6 +39,7 @@ from PyQt5.QtGui import (
     QCursor,
 )
 from athena.sound_effects import sounds
+from athena.config import load_config
 from PyQt5.QtWidgets import QWidget, QApplication
 
 # Windows API Constants for click-through transparent overlay
@@ -106,6 +107,10 @@ class ClickyCursorOverlay(QWidget):
         self.curve_elapsed_ms: int = 0
         self.curve_opacity: float = 1.0
         self.curve_is_fading: bool = False
+
+        # Configuration & Performance Tuning
+        self.config = load_config()
+        self.transient_mode = self.config.get("transient_mode", False)
 
         # State tracking
         self.voice_state = VoiceState.IDLE
@@ -317,12 +322,33 @@ class ClickyCursorOverlay(QWidget):
             target_x = mouse_pos.x() + 35.0
             target_y = mouse_pos.y() + 25.0
 
+            dx = target_x - self.current_global_pos.x()
+            dy = target_y - self.current_global_pos.y()
+            dist_sq = dx * dx + dy * dy
+            vel_sq = self.velocity.x() ** 2 + self.velocity.y() ** 2
+
+            is_idle = (
+                self.voice_state == VoiceState.IDLE
+                and self.bubble_opacity <= 0.0
+                and not self.curve_trail_points
+                and not self.active_drawings
+                and not self.curve_is_fading
+            )
+
+            # Performance Optimization: Settle at rest and eliminate redundant 60 FPS repaints
+            if is_idle and dist_sq < 0.25 and vel_sq < 0.04:
+                if self.velocity.x() != 0.0 or self.velocity.y() != 0.0:
+                    self.velocity = QPointF(0.0, 0.0)
+                    self.current_global_pos = QPointF(target_x, target_y)
+                    self.update()
+                return
+
             # Spring dampening (response: 0.2, dampingFraction: 0.6)
             k_spring = 0.22
             damping = 0.70
 
-            force_x = (target_x - self.current_global_pos.x()) * k_spring
-            force_y = (target_y - self.current_global_pos.y()) * k_spring
+            force_x = dx * k_spring
+            force_y = dy * k_spring
 
             vel_x = (self.velocity.x() + force_x) * damping
             vel_y = (self.velocity.y() + force_y) * damping
@@ -468,7 +494,8 @@ class ClickyCursorOverlay(QWidget):
 
         # 3. State: IDLE / RESPONDING / NAVIGATING / POINTING -> Blue Triangle
         else:
-            self._draw_triangle(painter, lx, ly)
+            if not (self.transient_mode and self.voice_state == VoiceState.IDLE and self.nav_mode == NavigationMode.FOLLOWING_CURSOR):
+                self._draw_triangle(painter, lx, ly)
 
         # 4. Speech Bubble (when pointing or answering)
         if self.bubble_opacity > 0.0 and self.bubble_text:

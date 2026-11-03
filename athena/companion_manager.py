@@ -152,7 +152,7 @@ class CompanionManager(QObject):
                     self.is_hotkey_down = False
                     self._on_hotkey_released()
 
-                time.sleep(0.015)  # ~66 Hz check rate
+                time.sleep(0.025)  # ~40 Hz check rate (25ms response, low CPU)
 
         threading.Thread(target=_poll_keys, daemon=True).start()
 
