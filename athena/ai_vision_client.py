@@ -154,10 +154,10 @@ class AIVisionClient:
         # 1. Google Gemini (aistudio.google.com) -> starts with 'AQ.' or 'AIza'
         if key.startswith("AQ.") or key.startswith("AIza") or "gemini" in self.configured_model.lower():
             endpoint = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
-            if self.configured_model in ("gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-3.1-flash-lite"):
+            if self.configured_model in ("gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-3-flash-preview"):
                 model = self.configured_model
             else:
-                model = "gemini-3.5-flash-lite"
+                model = "gemini-3.1-flash-lite"
             return "Google Gemini (aistudio.google.com)", endpoint, model
 
         # 2. Groq (console.groq.com) -> starts with 'gsk_'
@@ -211,7 +211,7 @@ class AIVisionClient:
         }
 
         try:
-            with httpx.Client(timeout=10.0) as client:
+            with httpx.Client(timeout=25.0) as client:
                 res = client.post(endpoint_url, headers=headers, json=payload)
                 res.raise_for_status()
                 return True, f"Successfully connected to {provider_name} ({active_model})."
