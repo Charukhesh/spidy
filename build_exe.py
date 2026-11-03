@@ -20,6 +20,8 @@ def build():
     # Clean up previous build artifacts
     shutil.rmtree(dist_dir, ignore_errors=True)
     shutil.rmtree(build_dir, ignore_errors=True)
+    dist_dir.mkdir(parents=True, exist_ok=True)
+    (build_dir / "athena").mkdir(parents=True, exist_ok=True)
 
     # Write optimized athena.spec with explicit exclusions of unused heavy Anaconda packages
     spec_content = f"""# -*- mode: python ; coding: utf-8 -*-
