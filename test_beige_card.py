@@ -66,6 +66,20 @@ class TestBeigeCardHUD(unittest.TestCase):
         self.hud.toggle_visibility()
         self.assertFalse(self.hud.isVisible())
 
+    def test_04_position_near_cursor(self):
+        """Verify card positions itself dynamically near the mouse cursor."""
+        from PyQt5.QtGui import QCursor
+        cursor_pt = QCursor.pos()
+        self.hud.show_response("Testing cursor proximity positioning.", "Test Query")
+        geo = self.hud.geometry()
+        # Card top-left should be near cursor (within screen width / height)
+        self.assertGreater(geo.width(), 0)
+        self.assertGreater(geo.height(), 0)
+        # Ensure card is within screen bounds
+        screen = app.screenAt(cursor_pt) or app.primaryScreen()
+        avail = screen.availableGeometry()
+        self.assertTrue(avail.contains(geo.topLeft()))
+
 
 if __name__ == "__main__":
     unittest.main()

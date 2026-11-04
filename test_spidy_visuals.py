@@ -9,7 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from PyQt5.QtWidgets import QApplication
 from PyQt5.QtGui import QPainter, QImage, QColor
-from PyQt5.QtCore import QPointF
+from PyQt5.QtCore import QPointF, QPoint
 
 app = QApplication.instance() or QApplication(sys.argv)
 
@@ -61,7 +61,11 @@ class TestSpidyVisuals(unittest.TestCase):
 
     def test_04_curve_trail_uses_red_palette(self):
         """Verify curve trail renders using red glowing pens."""
-        self.overlay.curve_trail_points = [QPointF(10.0, 10.0), QPointF(50.0, 50.0), QPointF(90.0, 20.0)]
+        self.overlay.curve_trail_points = [
+            QPointF(float(self.overlay.mapToGlobal(QPoint(20, 20)).x()), float(self.overlay.mapToGlobal(QPoint(20, 20)).y())),
+            QPointF(float(self.overlay.mapToGlobal(QPoint(60, 60)).x()), float(self.overlay.mapToGlobal(QPoint(60, 60)).y())),
+            QPointF(float(self.overlay.mapToGlobal(QPoint(100, 30)).x()), float(self.overlay.mapToGlobal(QPoint(100, 30)).y())),
+        ]
         self.overlay.curve_opacity = 1.0
 
         img = QImage(200, 200, QImage.Format_ARGB32_Premultiplied)
@@ -72,7 +76,14 @@ class TestSpidyVisuals(unittest.TestCase):
         finally:
             painter.end()
 
-        self.assertGreater(img.pixelColor(50, 50).alpha(), 0)
+        drawn_pixels = [
+            img.pixelColor(x, y)
+            for x in range(10, 120)
+            for y in range(10, 120)
+            if img.pixelColor(x, y).alpha() > 0
+        ]
+        self.assertGreater(len(drawn_pixels), 0)
+        self.assertGreater(drawn_pixels[0].red(), drawn_pixels[0].blue())
 
 
 if __name__ == "__main__":

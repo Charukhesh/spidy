@@ -88,25 +88,17 @@ class CompanionManager(QObject):
         self.ai_client = AIVisionClient(model=self.config.get("grok_model", "auto"))
         self.grok_client = self.ai_client
 
-        # Spidy Warm Beige Rounded Tab HUD
+        # Spidy Warm Beige Rounded Tab HUD (Spawns near cursor)
         self.beige_card = BeigeCardHUD()
 
-        # Legacy Top Bar HUD (disabled by default as requested in do.md)
-        self.top_bar_hud = TopBarGlassHUD()
-        self.history_hud = self.top_bar_hud
-        if not self.config.get("top_bar_hud_enabled", False):
-            self.top_bar_hud.hide()
+        # Legacy Top Bar HUD permanently dropped
+        self.top_bar_hud = None
+        self.history_hud = None
 
         # Thread-safe signal connections to GUI widgets
         self.sig_toggle_beige_card.connect(self.beige_card.toggle_visibility)
         self.sig_show_beige_card.connect(self.beige_card.show_response)
         self.sig_hide_beige_card.connect(self.beige_card.hide_card)
-
-        self.sig_set_listening.connect(self.top_bar_hud.set_listening)
-        self.sig_set_thinking.connect(self.top_bar_hud.set_thinking)
-        self.sig_show_response.connect(self.top_bar_hud.show_response)
-        self.sig_collapse_bar.connect(self.top_bar_hud.collapse_to_bar)
-        self.sig_schedule_collapse.connect(self.top_bar_hud.schedule_collapse)
         self.sig_apply_drawings.connect(self.overlay.apply_drawings)
         self.sig_clear_drawings.connect(self.overlay.clear_drawings)
 
@@ -387,10 +379,6 @@ class CompanionManager(QObject):
                 if is_structured and self.config.get("beige_tab_enabled", True):
                     self.sig_show_beige_card.emit(sanitized_speech, display_query)
 
-                # Legacy Top-Center Black Glass HUD (only if explicitly enabled)
-                if self.config.get("top_bar_hud_enabled", False):
-                    self.sig_show_response.emit(sanitized_speech, display_query)
-
                 # 2.5 Animated Curve Tracing around User Mouse Cursor
                 if ai_response.trace_curve:
                     c_type = ai_response.trace_curve.curve_type
@@ -538,7 +526,7 @@ class CompanionManager(QObject):
 
         welcome_text = "hey! i'm athena. hold control plus alt anytime and talk to me."
 
-        if self.config.get("top_bar_hud_enabled", True) or self.config.get("floating_card_enabled", True):
+        if self.config.get("top_bar_hud_enabled", False) and self.top_bar_hud:
             self.sig_show_response.emit(welcome_text, "Who are you?")
 
         def on_done():

@@ -139,9 +139,10 @@ class TestEverydayPowerFeatures(unittest.TestCase):
         cfg = load_config()
         hotkey = cfg.get("hotkey", "ctrl+alt").lower()
         self.assertEqual(hotkey, "ctrl+alt")
-        self.assertTrue(cfg.get("top_bar_hud_enabled", True))
+        self.assertFalse(cfg.get("top_bar_hud_enabled", False))
+        self.assertTrue(cfg.get("beige_tab_enabled", True))
         self.assertTrue(cfg.get("context_awareness", True))
-        print("[PASS] Test 5 Passed: Unified Ctrl+Alt Hotkey & Top Bar HUD configuration verified.")
+        print("[PASS] Test 5 Passed: Unified Ctrl+Alt Hotkey & Beige Tab HUD configuration verified.")
 
     def test_06_ai_vision_context_integration(self):
         """Verify multimodal AI client handles context prompt formatting."""

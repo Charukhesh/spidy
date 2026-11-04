@@ -200,22 +200,33 @@ class BeigeCardHUD(QWidget):
 
         self.main_layout.addWidget(self.card_frame)
 
-    def _position_near_top_center(self, width: int = 560, height: int = 240):
-        """Position the floating card smoothly near the top-center of the active screen."""
+    def _position_near_cursor(self, width: int = 500, height: int = 220):
+        """Position the floating card cleanly near the mouse cursor within visible screen bounds."""
         app = QApplication.instance()
-        if not app:
-            return
         cursor_pos = QCursor.pos()
-        screen = app.screenAt(cursor_pos) or app.primaryScreen()
-        if not screen:
-            return
-        geom = screen.geometry()
-        x = geom.left() + (geom.width() - width) // 2
-        y = geom.top() + 45  # 45px below top edge
+        screen = (app.screenAt(cursor_pos) if app else None) or (app.primaryScreen() if app else None)
+        avail = screen.availableGeometry() if screen else QRect(0, 0, 1920, 1080)
+
+        # Offset slightly down and right from cursor tip
+        x = cursor_pos.x() + 18
+        y = cursor_pos.y() + 18
+
+        # Flip to left of cursor if it would clip the right edge
+        if x + width > avail.right() - 12:
+            x = cursor_pos.x() - width - 18
+
+        # Flip to above cursor if it would clip the bottom edge
+        if y + height > avail.bottom() - 12:
+            y = cursor_pos.y() - height - 18
+
+        # Hard clamp within available desktop rectangle
+        x = max(avail.left() + 10, min(x, avail.right() - width - 10))
+        y = max(avail.top() + 10, min(y, avail.bottom() - height - 10))
+
         self.setGeometry(x, y, width, height)
 
     def show_response(self, response_text: str, query: str = ""):
-        """Display generated response text in the beige tab."""
+        """Display generated response text in the beige tab spawned near cursor."""
         self.last_query = query.strip()
         self.last_response = response_text.strip()
 
@@ -230,9 +241,9 @@ class BeigeCardHUD(QWidget):
         self.response_label.setText(self.last_response)
 
         # Compute dynamic card height based on text length
-        lines = self.last_response.count("\n") + len(self.last_response) // 60
-        target_h = min(420, max(140, 100 + lines * 22))
-        self._position_near_top_center(width=560, height=target_h)
+        lines = self.last_response.count("\n") + len(self.last_response) // 55
+        target_h = min(400, max(130, 95 + lines * 20))
+        self._position_near_cursor(width=500, height=target_h)
 
         # Reset copy button text
         self.copy_btn.setText("📋 Copy")

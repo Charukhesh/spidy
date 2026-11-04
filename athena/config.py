@@ -68,6 +68,9 @@ def load_config() -> Dict[str, Any]:
             user_config = json.load(f)
             merged = DEFAULT_CONFIG.copy()
             merged.update(user_config)
+            # Top-bar HUD is permanently dropped in Spidy in favor of cursor-spawned beige tab
+            merged["top_bar_hud_enabled"] = False
+            merged["beige_tab_enabled"] = True
             
             # If no valid API key is present in user config, pull from legacy configs
             current_k = merged.get("api_key") or merged.get("grok_api_key", "")
