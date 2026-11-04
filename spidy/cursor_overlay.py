@@ -40,6 +40,7 @@ from PyQt5.QtGui import (
 )
 from spidy.sound_effects import sounds
 from spidy.config import load_config
+from spidy.realtime_graphics import realtime_graphics, RealtimeGraphicSpec
 from PyQt5.QtWidgets import QWidget, QApplication
 
 # Windows API Constants for click-through transparent overlay
@@ -88,6 +89,8 @@ class OverlaySignals(QObject):
     trace_curve = pyqtSignal(list, str)
     fade_curve = pyqtSignal()
     clear_curve = pyqtSignal()
+    show_realtime_graphic = pyqtSignal(object)
+    clear_realtime_graphic = pyqtSignal()
 
 
 class ClickyCursorOverlay(QWidget):
@@ -106,6 +109,11 @@ class ClickyCursorOverlay(QWidget):
         self.signals.trace_curve.connect(self._on_trace_curve)
         self.signals.fade_curve.connect(self._on_fade_curve)
         self.signals.clear_curve.connect(self._on_clear_curve)
+        self.signals.show_realtime_graphic.connect(self._on_show_realtime_graphic)
+        self.signals.clear_realtime_graphic.connect(self._on_clear_realtime_graphic)
+
+        # Real-time graphics state
+        self.realtime_graphics_spec: Optional[RealtimeGraphicSpec] = None
 
         # Dynamic Curve Tracing State
         self.curve_points: List[QPointF] = []
@@ -277,6 +285,24 @@ class ClickyCursorOverlay(QWidget):
         """Immediately clear drawn curve."""
         self.signals.clear_curve.emit()
 
+    def show_realtime_graphic(self, spec: RealtimeGraphicSpec):
+        """Display an ambient real-time vector tutoring card, cutaway, or assembly guide."""
+        self.signals.show_realtime_graphic.emit(spec)
+
+    def clear_realtime_graphic(self):
+        """Dismiss active real-time graphic."""
+        self.signals.clear_realtime_graphic.emit()
+
+    def _on_show_realtime_graphic(self, spec):
+        self.realtime_graphics_spec = spec
+        realtime_graphics.set_spec(spec)
+        self.update()
+
+    def _on_clear_realtime_graphic(self):
+        self.realtime_graphics_spec = None
+        realtime_graphics.clear()
+        self.update()
+
     def _on_trace_curve(self, points: list, label: str):
         if not points:
             return
@@ -342,6 +368,7 @@ class ClickyCursorOverlay(QWidget):
                 and not self.curve_trail_points
                 and not self.active_drawings
                 and not self.curve_is_fading
+                and not getattr(self, "realtime_graphics_spec", None)
             )
 
             # Performance Optimization: Settle at rest and eliminate redundant 60 FPS repaints
@@ -485,6 +512,13 @@ class ClickyCursorOverlay(QWidget):
         # 0.5. Render Active Visual Drawings (Bounding Boxes, Circles, Arrows, Simulations, Notes)
         if self.active_drawings:
             self._render_active_drawings(painter)
+
+        # 0.75. Render Spidy Real-Time Graphics (Contextual Tutoring Cards, Cutaways, Assembly Guides)
+        if getattr(self, "realtime_graphics_spec", None):
+            app = QApplication.instance()
+            screen = app.screenAt(QCursor.pos()) if app else None
+            avail = screen.availableGeometry() if screen else self.rect()
+            realtime_graphics.render(painter, QCursor.pos(), avail)
 
         # Convert global screen coordinates to local widget coordinates!
         local_pos = self.mapFromGlobal(

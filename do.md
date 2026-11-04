@@ -58,3 +58,4 @@
    - Understanding videos, active code, Twitter posts, and technical diagrams directly from screen pixels without requiring manual copy-pasting.
 4. **From 2D Annotations to Dynamic Interactive Overlays:**
    - Opportunity for Spidy to progress from drawing 2D curves, bounding boxes, and pointers toward generating contextual interactive explanation cards and 3D schematics directly on top of the user's active window.
+

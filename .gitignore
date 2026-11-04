@@ -9,6 +9,7 @@ venv/
 ENV/
 build/
 dist/
+do.md
 *.spec
 
 # Application Data & Secrets

@@ -50,6 +50,7 @@ VK_CONTROL = 0x11
 VK_MENU = 0x12  # Alt
 VK_SPACE = 0x20
 VK_OEM_3 = 0xC0 # '~' / '`' key (US standard)
+VK_ESCAPE = 0x1B # Esc key to dismiss overlays/RTG
 
 
 class CompanionManager(QObject):
@@ -63,6 +64,10 @@ class CompanionManager(QObject):
     sig_schedule_collapse = pyqtSignal(int)
     sig_apply_drawings = pyqtSignal(list)
     sig_clear_drawings = pyqtSignal()
+
+    # Spidy Real-Time Graphics Signals
+    sig_show_graphic = pyqtSignal(object)
+    sig_clear_graphic = pyqtSignal()
 
     # Spidy Beige Tab Signals
     sig_toggle_beige_card = pyqtSignal()
@@ -101,6 +106,8 @@ class CompanionManager(QObject):
         self.sig_hide_beige_card.connect(self.beige_card.hide_card)
         self.sig_apply_drawings.connect(self.overlay.apply_drawings)
         self.sig_clear_drawings.connect(self.overlay.clear_drawings)
+        self.sig_show_graphic.connect(self.overlay.show_realtime_graphic)
+        self.sig_clear_graphic.connect(self.overlay.clear_realtime_graphic)
 
         # Pipeline state flags
         self.is_hotkey_down = False
@@ -133,6 +140,7 @@ class CompanionManager(QObject):
         def _poll_keys():
             was_pressed = False
             was_tilde_pressed = False
+            was_escape_pressed = False
 
             while not self._stop_hotkey_thread.is_set():
                 hotkey_choice = self.config.get("hotkey", "ctrl+alt").lower()
@@ -169,6 +177,15 @@ class CompanionManager(QObject):
                 elif not is_tilde_raw and was_tilde_pressed:
                     was_tilde_pressed = False
 
+                # Evaluate 'Esc' (VK_ESCAPE = 0x1B) to dismiss Realtime Graphics & Beige Card
+                is_escape_raw = bool(user32.GetAsyncKeyState(VK_ESCAPE) & 0x8000)
+                if is_escape_raw and not was_escape_pressed:
+                    was_escape_pressed = True
+                    self.sig_clear_graphic.emit()
+                    self.sig_hide_beige_card.emit()
+                elif not is_escape_raw and was_escape_pressed:
+                    was_escape_pressed = False
+
                 time.sleep(0.025)  # ~40 Hz check rate (25ms response, low CPU)
 
         threading.Thread(target=_poll_keys, daemon=True).start()
@@ -185,6 +202,7 @@ class CompanionManager(QObject):
         self.overlay.set_voice_state(VoiceState.LISTENING)
         self.overlay.clear_curve()
         self.sig_clear_drawings.emit()
+        self.sig_clear_graphic.emit()
         self.sig_set_listening.emit()
         sounds.play_activate()
         self.audio_recorder.start()
@@ -217,8 +235,10 @@ class CompanionManager(QObject):
         """Strip all technical tags and brackets to guarantee zero tags are ever spoken aloud."""
         if not text:
             return ""
-        # Remove [POINT:...], [DRAW:...], [SIMULATE:...], [WRITE:...], [HEARD:...], [TRACE:...], [OFFER_SEARCH:...], etc.
-        cleaned = re.sub(r"\[(?:POINT|DRAW|SIMULATE|WRITE|HEARD|TRACE|OFFER_SEARCH)[^\]]*\]", "", text, flags=re.IGNORECASE)
+        # Remove [DIAGRAM:...], [CUTAWAY:...], [ASSEMBLY:...]
+        cleaned = re.sub(r"\[(?:DIAGRAM|CUTAWAY|ASSEMBLY):\s*(?:\{.+?\}|[^\]]+)\]", "", text, flags=re.IGNORECASE | re.DOTALL)
+        # Remove [POINT:...], [DRAW:...], [SIMULATE:...], [WRITE:...], [HEARD:...], [TRACE:...], [OFFER_SEARCH:...], [ACTION:...], [REMEMBER:...], etc.
+        cleaned = re.sub(r"\[(?:POINT|DRAW|SIMULATE|WRITE|HEARD|TRACE|OFFER_SEARCH|ACTION|REMEMBER)[^\]]*\]", "", cleaned, flags=re.IGNORECASE)
         # Strip any other bracketed expressions like [POINT:none] or stray brackets
         cleaned = re.sub(r"\[[^\]]*\]", "", cleaned)
         # Clean up any leftover whitespace
@@ -410,6 +430,11 @@ class CompanionManager(QObject):
                         })
                     logger.info(f"Rendering {len(mapped_drawings)} visual drawing(s) on screen.")
                     self.sig_apply_drawings.emit(mapped_drawings)
+
+                # 3.1 Real-Time Graphics (Contextual Visual Tutoring, Cutaways, Assembly Guides)
+                if ai_response.realtime_graphic:
+                    logger.info(f"Displaying Real-Time Graphic: {ai_response.realtime_graphic.kind} - '{ai_response.realtime_graphic.title}'")
+                    self.sig_show_graphic.emit(ai_response.realtime_graphic)
 
                 # 4. Map element pointing coordinates to global screen points & fly to element
                 if ai_response.point_target and screen_captures:

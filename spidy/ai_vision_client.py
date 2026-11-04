@@ -23,6 +23,7 @@ import httpx
 from spidy.screen_capture import ScreenCaptureResult
 from spidy.config import get_api_key, load_config
 from spidy.memory_store import memory_store
+from spidy.realtime_graphics import RealtimeGraphicSpec
 
 logger = logging.getLogger("spidy.ai_client")
 
@@ -52,6 +53,18 @@ you have a small glowing red spider-man mask cursor and visual overlay engine th
      Example: [TRACE:cubic:cubic curve y=x³]
 4. Coordinates are in 0..1000 normalized space ((0,0) top-left, (1000,1000) bottom-right).
 5. If no pointing or drawing is needed, append [POINT:none].
+
+real-time graphics (RTG):
+you have a zero-compute real-time vector graphics engine. whenever a visual explanation, cutaway diagram, or hardware walkthrough provides immense clarity, append one of these tags:
+1. Contextual Visual Tutoring Card:
+   use when explaining educational concepts, code logic, or tensors from the screen.
+   [DIAGRAM: {"title": "<concept title>", "summary": "<1-line takeaway>", "nodes": [{"label": "Input", "sublabel": "shape/value"}, {"label": "Target", "sublabel": "prediction"}], "loop": ["Guess", "Compare", "Adjust"], "equation": "<optional formula>"}]
+2. Mechanical & Physics Cutaway Schematic:
+   use when explaining how machines, engines, jets, or physics mechanisms operate.
+   [CUTAWAY: {"title": "<system title>", "principle": "<e.g. push air down -> lift up>", "components": [{"name": "Lift Fan", "desc": "Counter-rotating air column"}, {"name": "Swivel Nozzle", "desc": "3-bearing vector duct"}], "vectors": [{"label": "Downward Thrust"}]}]
+3. Step-by-Step Hardware & Connector Assembly:
+   use when guiding physical assembly, ribbon cables, pinouts, or board headers.
+   [ASSEMBLY: {"title": "<guide title>", "board": "Raspberry Pi 5", "pin_info": "22-pin ribbon, contacts facing inward", "steps": [{"action": "Gently lift retaining collar", "detail": "Pull straight up 1mm"}, {"action": "Slide ribbon into slot", "detail": "Ensure contacts align"}, {"action": "Press collar down firmly", "detail": "Locks cable in place"}]}]
 
 web search verification:
 - if the user asks any question that requires external fact-checking, live web verification, recent sports scores, real-time news, or pricing:
@@ -132,6 +145,7 @@ class AIVisionResponse:
     action_type: str = ""
     action_arg: str = ""
     remember_item: Optional[Tuple[str, str, str]] = None
+    realtime_graphic: Optional[RealtimeGraphicSpec] = None
 
 
 # Backward compatibility alias
@@ -317,8 +331,8 @@ class AIVisionClient:
             data = response.json()
             raw_reply = data["choices"][0]["message"].get("content", "")
 
-            # Parse pointing coordinates, visual drawings, heard prompt, curve tracing, web search, action, and remember
-            spoken_text, point_target, drawings, heard_prompt, trace_curve, offer_search, action_type, action_arg, remember_item = self.parse_visual_tags(raw_reply)
+            # Parse pointing coordinates, visual drawings, heard prompt, curve tracing, web search, action, remember, and realtime graphics
+            spoken_text, point_target, drawings, heard_prompt, trace_curve, offer_search, action_type, action_arg, remember_item, realtime_graphic = self.parse_visual_tags(raw_reply)
 
             # Map normalized [0..1000] coordinates to screenshot pixel resolution
             point_target, drawings = self._scale_to_capture_pixels(point_target, drawings, screen_captures)
@@ -340,6 +354,7 @@ class AIVisionClient:
                 action_type=action_type,
                 action_arg=action_arg,
                 remember_item=remember_item,
+                realtime_graphic=realtime_graphic,
             )
 
         except httpx.HTTPStatusError as e:
@@ -422,7 +437,7 @@ class AIVisionClient:
     @staticmethod
     def parse_visual_tags(
         response_text: str,
-    ) -> Tuple[str, Optional[PointingTarget], List[VisualDrawing], str, Optional[TraceCurveTarget], str, str, str, Optional[Tuple[str, str, str]]]:
+    ) -> Tuple[str, Optional[PointingTarget], List[VisualDrawing], str, Optional[TraceCurveTarget], str, str, str, Optional[Tuple[str, str, str]], Optional[RealtimeGraphicSpec]]:
         """Parse visual tags, actions, memories, heard prompts, and drawings."""
         spoken = response_text
         point_target: Optional[PointingTarget] = None
@@ -556,9 +571,79 @@ class AIVisionClient:
             remember_item = (match_rem.group(1).strip(), match_rem.group(2).strip(), match_rem.group(3).strip())
             spoken = rem_pattern.sub("", spoken)
 
+        # 11. Parse [DIAGRAM:...], [CUTAWAY:...], [ASSEMBLY:...]
+        realtime_graphic: Optional[RealtimeGraphicSpec] = None
+        match_start = re.search(r"\[(DIAGRAM|CUTAWAY|ASSEMBLY):\s*", spoken, re.IGNORECASE)
+        if match_start:
+            kind_tag = match_start.group(1).lower()
+            tag_start_idx = match_start.start()
+            content_start_idx = match_start.end()
+
+            # If payload starts with JSON '{', find balanced '}'
+            if content_start_idx < len(spoken) and spoken[content_start_idx] == "{":
+                brace_count = 0
+                in_string = False
+                escape_char = False
+                end_brace_idx = -1
+
+                for idx in range(content_start_idx, len(spoken)):
+                    ch = spoken[idx]
+                    if escape_char:
+                        escape_char = False
+                        continue
+                    if ch == "\\":
+                        escape_char = True
+                        continue
+                    if ch == '"':
+                        in_string = not in_string
+                        continue
+                    if not in_string:
+                        if ch == "{":
+                            brace_count += 1
+                        elif ch == "}":
+                            brace_count -= 1
+                            if brace_count == 0:
+                                end_brace_idx = idx
+                                break
+
+                if end_brace_idx != -1:
+                    raw_body = spoken[content_start_idx : end_brace_idx + 1]
+                    closing_bracket_idx = spoken.find("]", end_brace_idx)
+                    tag_end_idx = (closing_bracket_idx + 1) if closing_bracket_idx != -1 else (end_brace_idx + 1)
+                else:
+                    closing_bracket_idx = spoken.find("]", content_start_idx)
+                    tag_end_idx = (closing_bracket_idx + 1) if closing_bracket_idx != -1 else len(spoken)
+                    raw_body = spoken[content_start_idx : tag_end_idx - (1 if closing_bracket_idx != -1 else 0)].strip()
+            else:
+                closing_bracket_idx = spoken.find("]", content_start_idx)
+                tag_end_idx = (closing_bracket_idx + 1) if closing_bracket_idx != -1 else len(spoken)
+                raw_body = spoken[content_start_idx : tag_end_idx - (1 if closing_bracket_idx != -1 else 0)].strip()
+
+            try:
+                parsed_data = json.loads(raw_body)
+                title = parsed_data.get("title", f"Spidy {kind_tag.capitalize()}")
+                sub = parsed_data.get("summary") or parsed_data.get("principle") or parsed_data.get("pin_info") or parsed_data.get("hardware", "")
+                realtime_graphic = RealtimeGraphicSpec(
+                    kind=kind_tag,
+                    title=title,
+                    subtitle=sub,
+                    data=parsed_data,
+                    raw_payload=raw_body,
+                )
+            except Exception as e:
+                logger.debug(f"RTG JSON parse fallback: {e}")
+                realtime_graphic = RealtimeGraphicSpec(
+                    kind=kind_tag,
+                    title=f"Spidy {kind_tag.capitalize()}",
+                    subtitle=raw_body[:60],
+                    data={"summary": raw_body},
+                    raw_payload=raw_body,
+                )
+            spoken = spoken[:tag_start_idx] + spoken[tag_end_idx:]
+
         # Failsafe cleanup: strip any remaining bracketed tags or negative control [POINT:none]
         spoken = re.sub(
-            r"\[(?:POINT|DRAW|SIMULATE|WRITE|HEARD|TRACE|OFFER_SEARCH|ACTION|REMEMBER)[^\]]*\]",
+            r"\[(?:POINT|DRAW|SIMULATE|WRITE|HEARD|TRACE|OFFER_SEARCH|ACTION|REMEMBER|DIAGRAM|CUTAWAY|ASSEMBLY)[^\]]*\]",
             "",
             spoken,
             flags=re.IGNORECASE,
@@ -566,7 +651,7 @@ class AIVisionClient:
         spoken = re.sub(r"\[POINT:\s*none\s*\]", "", spoken, flags=re.IGNORECASE).strip()
         spoken = re.sub(r"\s+", " ", spoken).strip()
 
-        return spoken.strip(), point_target, drawings, heard_prompt, trace_curve, offer_search, action_type, action_arg, remember_item
+        return spoken.strip(), point_target, drawings, heard_prompt, trace_curve, offer_search, action_type, action_arg, remember_item, realtime_graphic
 
 
 # Backward compatibility alias

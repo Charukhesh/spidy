@@ -9,6 +9,7 @@ Provides hands-on local OS capabilities without opening terminal windows:
 
 import os
 import sys
+import time
 import ctypes
 import json
 import logging
@@ -31,6 +32,18 @@ HWND_TOP = 0
 SWP_SHOWWINDOW = 0x0040
 
 user32 = ctypes.windll.user32
+kernel32 = ctypes.windll.kernel32
+
+# 64-bit safe Windows memory & clipboard prototypes
+kernel32.GlobalAlloc.restype = ctypes.c_void_p
+kernel32.GlobalAlloc.argtypes = [ctypes.c_uint, ctypes.c_size_t]
+kernel32.GlobalLock.restype = ctypes.c_void_p
+kernel32.GlobalLock.argtypes = [ctypes.c_void_p]
+kernel32.GlobalUnlock.argtypes = [ctypes.c_void_p]
+user32.GetClipboardData.restype = ctypes.c_void_p
+user32.GetClipboardData.argtypes = [ctypes.c_uint]
+user32.SetClipboardData.restype = ctypes.c_void_p
+user32.SetClipboardData.argtypes = [ctypes.c_uint, ctypes.c_void_p]
 
 
 class DesktopActionController:
@@ -166,59 +179,70 @@ class DesktopActionController:
 
     @classmethod
     def get_clipboard_text(cls) -> str:
-        """Safely read text from Windows system clipboard."""
+        """Safely read text from Windows system clipboard with retry on transient locks."""
         try:
             app = QApplication.instance()
             if app:
                 clip = app.clipboard()
-                return clip.text()
+                txt = clip.text()
+                if txt:
+                    return txt
         except Exception as e:
             logger.debug(f"Qt clipboard read notice: {e}")
 
-        # Fallback to ctypes
-        user32.OpenClipboard(None)
-        try:
-            h_data = user32.GetClipboardData(13)  # CF_UNICODETEXT = 13
-            if h_data:
-                kernel32 = ctypes.windll.kernel32
-                p_text = kernel32.GlobalLock(h_data)
-                text = ctypes.c_wchar_p(p_text).value or ""
-                kernel32.GlobalUnlock(h_data)
-                return text
-        finally:
-            user32.CloseClipboard()
+        # Fallback to Windows ctypes API with retry if locked by another process
+        for _ in range(5):
+            try:
+                if user32.OpenClipboard(None):
+                    try:
+                        h_data = user32.GetClipboardData(13)  # CF_UNICODETEXT = 13
+                        if h_data:
+                            p_text = kernel32.GlobalLock(h_data)
+                            text = ctypes.c_wchar_p(p_text).value or ""
+                            kernel32.GlobalUnlock(h_data)
+                            return text
+                    finally:
+                        user32.CloseClipboard()
+            except Exception as e:
+                logger.debug(f"ctypes clipboard read notice: {e}")
+            time.sleep(0.01)
         return ""
 
     @classmethod
     def set_clipboard_text(cls, text: str) -> bool:
-        """Safely write text to Windows system clipboard."""
+        """Safely write text to Windows system clipboard with retry on transient locks."""
+        written = False
         try:
             app = QApplication.instance()
             if app:
                 clip = app.clipboard()
                 clip.setText(text)
                 app.processEvents()
-                return True
+                written = True
         except Exception as e:
             logger.debug(f"Qt clipboard write notice: {e}")
 
-        # Fallback to ctypes
-        user32.OpenClipboard(None)
-        user32.EmptyClipboard()
-        try:
-            kernel32 = ctypes.windll.kernel32
-            buffer = ctypes.create_unicode_buffer(text)
-            h_mem = kernel32.GlobalAlloc(0x0042, ctypes.sizeof(buffer))  # GMEM_MOVEABLE | GMEM_ZEROINIT
-            p_mem = kernel32.GlobalLock(h_mem)
-            ctypes.memmove(p_mem, buffer, ctypes.sizeof(buffer))
-            kernel32.GlobalUnlock(h_mem)
-            user32.SetClipboardData(13, h_mem)
-            return True
-        except Exception as e:
-            logger.error(f"Clipboard write error: {e}")
-            return False
-        finally:
-            user32.CloseClipboard()
+        # Always write via Windows ctypes API with retry if locked by OS clipboard listeners
+        for _ in range(5):
+            try:
+                if user32.OpenClipboard(None):
+                    try:
+                        user32.EmptyClipboard()
+                        buffer = ctypes.create_unicode_buffer(text)
+                        h_mem = kernel32.GlobalAlloc(0x0042, ctypes.sizeof(buffer))  # GMEM_MOVEABLE | GMEM_ZEROINIT
+                        p_mem = kernel32.GlobalLock(h_mem)
+                        ctypes.memmove(p_mem, buffer, ctypes.sizeof(buffer))
+                        kernel32.GlobalUnlock(h_mem)
+                        user32.SetClipboardData(13, h_mem)
+                        written = True
+                        break
+                    finally:
+                        user32.CloseClipboard()
+            except Exception as e:
+                logger.debug(f"ctypes clipboard write notice: {e}")
+            time.sleep(0.01)
+
+        return written
 
     @classmethod
     def execute_action(cls, action_type: str, action_arg: str = "") -> Tuple[bool, str]:
