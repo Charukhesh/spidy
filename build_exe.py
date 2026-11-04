@@ -1,5 +1,5 @@
-"""Athena Windows Executable Builder using PyInstaller.
-Builds standalone single-file athena.exe with all dependencies bundled
+"""Spidy Windows Executable Builder using PyInstaller.
+Builds standalone single-file spidy.exe with all dependencies bundled
 and deploys it to the user's Downloads folder.
 """
 
@@ -14,16 +14,16 @@ def build():
     dist_dir = root_dir / "dist"
     build_dir = root_dir / "build"
     downloads_dir = Path.home() / "Downloads"
-    target_exe = downloads_dir / "athena.exe"
-    spec_path = root_dir / "athena.spec"
+    target_exe = downloads_dir / "spidy.exe"
+    spec_path = root_dir / "spidy.spec"
 
     # Clean up previous build artifacts
     shutil.rmtree(dist_dir, ignore_errors=True)
     shutil.rmtree(build_dir, ignore_errors=True)
     dist_dir.mkdir(parents=True, exist_ok=True)
-    (build_dir / "athena").mkdir(parents=True, exist_ok=True)
+    (build_dir / "spidy").mkdir(parents=True, exist_ok=True)
 
-    # Write optimized athena.spec with explicit exclusions of unused heavy Anaconda packages
+    # Write optimized spidy.spec with explicit exclusions of unused heavy Anaconda packages
     spec_content = f"""# -*- mode: python ; coding: utf-8 -*-
 from PyInstaller.utils.hooks import collect_data_files
 from PyInstaller.utils.hooks import collect_dynamic_libs
@@ -35,7 +35,7 @@ datas += collect_data_files('faster_whisper')
 binaries += collect_dynamic_libs('ctranslate2')
 
 a = Analysis(
-    [r'{root_dir / "run_athena.py"}'],
+    [r'{root_dir / "run_spidy.py"}'],
     pathex=[],
     binaries=binaries,
     datas=datas,
@@ -72,7 +72,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='athena',
+    name='spidy',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -99,9 +99,9 @@ exe = EXE(
     ]
 
     print("=" * 60)
-    print("STARTING ATHENA STANDALONE EXECUTABLE BUILD")
+    print("STARTING SPIDY STANDALONE EXECUTABLE BUILD")
     print("=" * 60)
-    print(f"Target: Single-file Windows executable (athena.exe)")
+    print(f"Target: Single-file Windows executable (spidy.exe)")
     print(f"Output destination: {target_exe}")
     print("Executing command:", " ".join(cmd))
 
@@ -110,23 +110,23 @@ exe = EXE(
         print(f"\n[ERROR] Build failed with exit code {result.returncode}")
         return False
 
-    built_exe = dist_dir / "athena.exe"
+    built_exe = dist_dir / "spidy.exe"
     if not built_exe.exists():
         print(f"\n[ERROR] Built executable not found at: {built_exe}")
         return False
 
     size_mb = built_exe.stat().st_size / (1024 * 1024)
-    print(f"\n[SUCCESS] Generated athena.exe ({size_mb:.2f} MB)")
+    print(f"\n[SUCCESS] Generated spidy.exe ({size_mb:.2f} MB)")
 
     # Copy to user's Downloads folder
     print(f"Copying to Downloads folder: {target_exe}")
     try:
         shutil.copy2(built_exe, target_exe)
         copied_size_mb = target_exe.stat().st_size / (1024 * 1024)
-        print(f"[VERIFIED] Successfully placed athena.exe ({copied_size_mb:.2f} MB) in {downloads_dir}")
+        print(f"[VERIFIED] Successfully placed spidy.exe ({copied_size_mb:.2f} MB) in {downloads_dir}")
         return True
     except Exception as e:
-        print(f"[ERROR] Failed to copy athena.exe to Downloads: {e}")
+        print(f"[ERROR] Failed to copy spidy.exe to Downloads: {e}")
         return False
 
 if __name__ == "__main__":

@@ -34,6 +34,7 @@ from athena.cursor_overlay import ClickyCursorOverlay, VoiceState
 from athena.sound_effects import sounds
 from athena.context_inspector import inspector
 from athena.top_bar_hud import TopBarGlassHUD
+from athena.beige_card_hud import BeigeCardHUD
 from athena.curve_generator import CurveGenerator
 from athena.web_search import web_search
 from athena.desktop_actions import desktop_actions
@@ -48,6 +49,7 @@ VK_SHIFT = 0x10
 VK_CONTROL = 0x11
 VK_MENU = 0x12  # Alt
 VK_SPACE = 0x20
+VK_OEM_3 = 0xC0 # '~' / '`' key (US standard)
 
 
 class CompanionManager(QObject):
@@ -61,6 +63,11 @@ class CompanionManager(QObject):
     sig_schedule_collapse = pyqtSignal(int)
     sig_apply_drawings = pyqtSignal(list)
     sig_clear_drawings = pyqtSignal()
+
+    # Spidy Beige Tab Signals
+    sig_toggle_beige_card = pyqtSignal()
+    sig_show_beige_card = pyqtSignal(str, str)
+    sig_hide_beige_card = pyqtSignal()
 
     def __init__(self, overlay: ClickyCursorOverlay, parent=None):
         super().__init__(parent)
@@ -81,11 +88,20 @@ class CompanionManager(QObject):
         self.ai_client = AIVisionClient(model=self.config.get("grok_model", "auto"))
         self.grok_client = self.ai_client
 
-        # Top-Center Black Glass Dynamic Bar HUD
+        # Spidy Warm Beige Rounded Tab HUD
+        self.beige_card = BeigeCardHUD()
+
+        # Legacy Top Bar HUD (disabled by default as requested in do.md)
         self.top_bar_hud = TopBarGlassHUD()
-        self.history_hud = self.top_bar_hud  # Backward compatibility alias
+        self.history_hud = self.top_bar_hud
+        if not self.config.get("top_bar_hud_enabled", False):
+            self.top_bar_hud.hide()
 
         # Thread-safe signal connections to GUI widgets
+        self.sig_toggle_beige_card.connect(self.beige_card.toggle_visibility)
+        self.sig_show_beige_card.connect(self.beige_card.show_response)
+        self.sig_hide_beige_card.connect(self.beige_card.hide_card)
+
         self.sig_set_listening.connect(self.top_bar_hud.set_listening)
         self.sig_set_thinking.connect(self.top_bar_hud.set_thinking)
         self.sig_show_response.connect(self.top_bar_hud.show_response)
@@ -124,6 +140,7 @@ class CompanionManager(QObject):
 
         def _poll_keys():
             was_pressed = False
+            was_tilde_pressed = False
 
             while not self._stop_hotkey_thread.is_set():
                 hotkey_choice = self.config.get("hotkey", "ctrl+alt").lower()
@@ -142,7 +159,7 @@ class CompanionManager(QObject):
                         user32.GetAsyncKeyState(VK_MENU) & 0x8000
                     )
 
-                # State Transitions
+                # State Transitions for Push-to-Talk
                 if is_hotkey_raw and not was_pressed:
                     was_pressed = True
                     self.is_hotkey_down = True
@@ -151,6 +168,14 @@ class CompanionManager(QObject):
                     was_pressed = False
                     self.is_hotkey_down = False
                     self._on_hotkey_released()
+
+                # Evaluate '~' (Tilde / Backquote, VK_OEM_3 = 0xC0) to toggle Spidy Beige Tab
+                is_tilde_raw = bool(user32.GetAsyncKeyState(VK_OEM_3) & 0x8000)
+                if is_tilde_raw and not was_tilde_pressed:
+                    was_tilde_pressed = True
+                    self.sig_toggle_beige_card.emit()
+                elif not is_tilde_raw and was_tilde_pressed:
+                    was_tilde_pressed = False
 
                 time.sleep(0.025)  # ~40 Hz check rate (25ms response, low CPU)
 
@@ -345,8 +370,25 @@ class CompanionManager(QObject):
                 # Clean speech text to guarantee zero tags are read aloud
                 sanitized_speech = self._sanitize_speech_text(ai_response.spoken_text)
 
-                # Show Top-Center Black Glass HUD response with copy button!
-                if self.config.get("top_bar_hud_enabled", True) or self.config.get("floating_card_enabled", True):
+                # Store latest response in Spidy Beige Tab
+                self.beige_card.last_response = sanitized_speech
+                self.beige_card.last_query = display_query
+
+                # Intelligent Auto-Display Decision:
+                # If the reply contains code blocks (```), markdown tables (|), URLs, or OCR data,
+                # automatically render the beige tab with 1-click copy!
+                is_structured = (
+                    "```" in ai_response.full_text
+                    or "\n|" in ai_response.full_text
+                    or "http" in ai_response.full_text
+                    or (ai_response.action_type == "ocr")
+                    or len(sanitized_speech) > 240
+                )
+                if is_structured and self.config.get("beige_tab_enabled", True):
+                    self.sig_show_beige_card.emit(sanitized_speech, display_query)
+
+                # Legacy Top-Center Black Glass HUD (only if explicitly enabled)
+                if self.config.get("top_bar_hud_enabled", False):
                     self.sig_show_response.emit(sanitized_speech, display_query)
 
                 # 2.5 Animated Curve Tracing around User Mouse Cursor

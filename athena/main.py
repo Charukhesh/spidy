@@ -33,7 +33,7 @@ def main():
     QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
 
     app = QApplication(sys.argv)
-    app.setApplicationName("Athena")
+    app.setApplicationName("Spidy")
     app.setQuitOnLastWindowClosed(False)
 
     # 1. Initialize Fullscreen Transparent Overlay Window
@@ -60,10 +60,9 @@ def main():
     manager.status_updated.connect(tray.update_status)
 
     logging.info("=" * 60)
-    logging.info("Athena Everyday Desktop Companion is active!")
-    logging.info("Hold 'Ctrl + Alt' to speak to Athena and analyze your screen.")
-    logging.info("Top-center black glass Dynamic Bar HUD is active.")
-    logging.info("Click the blue triangle tray icon to open Athena Settings.")
+    logging.info("🕷️ Spidy Everyday Desktop Companion is active!")
+    logging.info("Hold 'Ctrl + Alt' to speak to Spidy and analyze your screen.")
+    logging.info("Press '~' (tilde) to toggle the warm beige card and copy text responses.")
     logging.info("=" * 60)
 
     # Start Qt event loop

@@ -163,6 +163,10 @@ class SoundEffectsEngine:
     def play_dictation_stop(self):
         self.play("dictation_stop")
 
+    def play_ding(self):
+        """Soft pleasant ding / sparkle chime on successful copy or action."""
+        self.play("arrival")
+
 
 # Global singleton access
 sounds = SoundEffectsEngine.get_instance()

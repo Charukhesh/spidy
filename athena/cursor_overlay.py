@@ -49,9 +49,18 @@ WS_EX_TRANSPARENT = 0x00000020
 WS_EX_TOOLWINDOW = 0x00000080
 WS_EX_NOACTIVATE = 0x08000000
 
-CLICKY_BLUE = QColor("#3380FF")
-CLICKY_BLUE_GLOW = QColor(51, 128, 255, 120)
-NEON_CYAN = QColor(96, 165, 250)
+# Spidy Signature Spider-Man Color Palette
+SPIDY_RED = QColor("#DC2626")           # Vibrant Spider-Man Red
+SPIDY_CRIMSON = QColor("#991B1B")       # Dark Crimson Web Lattice
+SPIDY_RED_GLOW = QColor(220, 38, 38, 120)
+SPIDY_WEB_WHITE = QColor("#F8FAFC")     # Clean Web White Lens
+SPIDY_LENS_BLACK = QColor("#111827")    # Deep Black Eye Contour
+SPIDY_AMBER_SENSE = QColor(251, 191, 36) # Spider-Sense Amber
+
+# Color aliases for drawings and retro-compatibility
+CLICKY_BLUE = SPIDY_RED
+CLICKY_BLUE_GLOW = SPIDY_RED_GLOW
+NEON_CYAN = SPIDY_RED
 
 
 class VoiceState(Enum):
@@ -488,14 +497,14 @@ class ClickyCursorOverlay(QWidget):
         if self.voice_state == VoiceState.LISTENING and self.nav_mode == NavigationMode.FOLLOWING_CURSOR:
             self._draw_waveform(painter, lx, ly)
 
-        # 2. State: PROCESSING -> Rotating Spinner
+        # 2. State: PROCESSING -> Spider-Sense Tingling Pulse
         elif self.voice_state == VoiceState.PROCESSING and self.nav_mode == NavigationMode.FOLLOWING_CURSOR:
-            self._draw_spinner(painter, lx, ly)
+            self._draw_spiderman_loading(painter, lx, ly)
 
-        # 3. State: IDLE / RESPONDING / NAVIGATING / POINTING -> Blue Triangle
+        # 3. State: IDLE / RESPONDING / NAVIGATING / POINTING -> Spider-Man Mask
         else:
             if not (self.transient_mode and self.voice_state == VoiceState.IDLE and self.nav_mode == NavigationMode.FOLLOWING_CURSOR):
-                self._draw_triangle(painter, lx, ly)
+                self._draw_spiderman_icon(painter, lx, ly)
 
         # 4. Speech Bubble (when pointing or answering)
         if self.bubble_opacity > 0.0 and self.bubble_text:
@@ -527,15 +536,15 @@ class ClickyCursorOverlay(QWidget):
             l_pt = self.mapFromGlobal(QPoint(int(pt.x()), int(pt.y())))
             path.lineTo(QPointF(l_pt.x(), l_pt.y()))
 
-        # Layer 1: Wide electric blue outer glow
-        glow_alpha = int(75 * self.curve_opacity)
-        painter.setPen(QPen(QColor(51, 128, 255, glow_alpha), 9, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+        # Layer 1: Wide electric Spider-Man Red outer glow
+        glow_alpha = int(85 * self.curve_opacity)
+        painter.setPen(QPen(QColor(220, 38, 38, glow_alpha), 9, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
         painter.setBrush(Qt.NoBrush)
         painter.drawPath(path)
 
-        # Layer 2: Neon Cyan mid glow
-        cyan_alpha = int(180 * self.curve_opacity)
-        painter.setPen(QPen(QColor(96, 165, 250, cyan_alpha), 4.5, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+        # Layer 2: Radiant Crimson mid glow
+        crimson_alpha = int(190 * self.curve_opacity)
+        painter.setPen(QPen(QColor(239, 68, 68, crimson_alpha), 4.5, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
         painter.drawPath(path)
 
         # Layer 3: White-hot core beam
@@ -546,8 +555,8 @@ class ClickyCursorOverlay(QWidget):
         # Pulse ring at cursor position if tracing
         if self.nav_mode == NavigationMode.TRACING_CURVE:
             head = self.mapFromGlobal(QPoint(int(self.current_global_pos.x()), int(self.current_global_pos.y())))
-            painter.setPen(QPen(QColor(96, 165, 250, 160), 2))
-            painter.setBrush(QBrush(QColor(51, 128, 255, 60)))
+            painter.setPen(QPen(QColor(239, 68, 68, 180), 2))
+            painter.setBrush(QBrush(QColor(220, 38, 38, 70)))
             painter.drawEllipse(head, 8, 8)
 
         painter.restore()
@@ -571,7 +580,7 @@ class ClickyCursorOverlay(QWidget):
                 self._draw_visual_text(painter, coords[0], coords[1], label)
 
     def _draw_visual_box(self, painter: QPainter, gx1: int, gy1: int, gx2: int, gy2: int, label: str):
-        """Draw a sleek, glowing neon-blue rounded bounding box with label badge."""
+        """Draw a sleek, glowing Spidy red rounded bounding box with label badge."""
         p1 = self.mapFromGlobal(QPoint(min(gx1, gx2), min(gy1, gy2)))
         p2 = self.mapFromGlobal(QPoint(max(gx1, gx2), max(gy1, gy2)))
 
@@ -580,25 +589,25 @@ class ClickyCursorOverlay(QWidget):
         painter.save()
         # Outer glow
         glow_rect = rect.adjusted(-4, -4, 4, 4)
-        painter.setPen(QPen(QColor(51, 128, 255, 60), 6))
+        painter.setPen(QPen(QColor(220, 38, 38, 70), 6))
         painter.setBrush(Qt.NoBrush)
         painter.drawRoundedRect(glow_rect, 10, 10)
 
-        # Semi-translucent glass fill
-        painter.setPen(QPen(NEON_CYAN, 2.5))
-        painter.setBrush(QBrush(QColor(37, 99, 235, 35)))
+        # Semi-translucent crimson glass fill
+        painter.setPen(QPen(SPIDY_RED, 2.5))
+        painter.setBrush(QBrush(QColor(220, 38, 38, 35)))
         painter.drawRoundedRect(rect, 8, 8)
 
         # Label Pill Badge at top-left
         if label:
-            font = QFont("Segoe UI", 9, QFont.Bold)
+            font = QFont("Calibri", 10, QFont.Bold)
             painter.setFont(font)
             metrics = QFontMetrics(font)
             badge_w = metrics.horizontalAdvance(label) + 14
             badge_h = 22
             badge_rect = QRectF(rect.x() + 4, max(0.0, rect.y() - 24), badge_w, badge_h)
 
-            painter.setPen(QPen(NEON_CYAN, 1))
+            painter.setPen(QPen(SPIDY_RED, 1))
             painter.setBrush(QBrush(QColor(16, 18, 17, 230)))
             painter.drawRoundedRect(badge_rect, 6, 6)
 
@@ -608,30 +617,30 @@ class ClickyCursorOverlay(QWidget):
         painter.restore()
 
     def _draw_visual_circle(self, painter: QPainter, gcx: int, gcy: int, radius: int, label: str):
-        """Draw a glowing highlight circle around a focal UI element."""
+        """Draw a glowing highlight circle in Spidy red around a focal UI element."""
         center = self.mapFromGlobal(QPoint(gcx, gcy))
         r = float(max(12, radius))
 
         painter.save()
         # Glow ring
-        painter.setPen(QPen(QColor(51, 128, 255, 60), 6))
+        painter.setPen(QPen(QColor(220, 38, 38, 70), 6))
         painter.setBrush(Qt.NoBrush)
         painter.drawEllipse(center, r + 4, r + 4)
 
-        # Main Neon Ring
-        painter.setPen(QPen(NEON_CYAN, 2.5))
-        painter.setBrush(QBrush(QColor(37, 99, 235, 30)))
+        # Main Neon Red Ring
+        painter.setPen(QPen(SPIDY_RED, 2.5))
+        painter.setBrush(QBrush(QColor(220, 38, 38, 30)))
         painter.drawEllipse(center, r, r)
 
         if label:
-            font = QFont("Segoe UI", 9, QFont.Bold)
+            font = QFont("Calibri", 10, QFont.Bold)
             painter.setFont(font)
             metrics = QFontMetrics(font)
             badge_w = metrics.horizontalAdvance(label) + 14
             badge_h = 22
             badge_rect = QRectF(center.x() - badge_w / 2.0, center.y() + r + 6, badge_w, badge_h)
 
-            painter.setPen(QPen(NEON_CYAN, 1))
+            painter.setPen(QPen(SPIDY_RED, 1))
             painter.setBrush(QBrush(QColor(16, 18, 17, 230)))
             painter.drawRoundedRect(badge_rect, 6, 6)
 
@@ -669,14 +678,14 @@ class ClickyCursorOverlay(QWidget):
         painter.drawPolygon(arrow_head)
 
         if label:
-            font = QFont("Segoe UI", 9, QFont.Bold)
+            font = QFont("Calibri", 10, QFont.Bold)
             painter.setFont(font)
             metrics = QFontMetrics(font)
             badge_w = metrics.horizontalAdvance(label) + 14
             badge_h = 22
             badge_rect = QRectF(p1.x() - badge_w / 2.0, p1.y() - 26, badge_w, badge_h)
 
-            painter.setPen(QPen(NEON_CYAN, 1))
+            painter.setPen(QPen(SPIDY_RED, 1))
             painter.setBrush(QBrush(QColor(16, 18, 17, 230)))
             painter.drawRoundedRect(badge_rect, 6, 6)
 
@@ -698,38 +707,38 @@ class ClickyCursorOverlay(QWidget):
         painter.save()
 
         # Connect nodes with glowing dashed curve / lines
-        pen = QPen(NEON_CYAN, 2.5, Qt.DashLine)
+        pen = QPen(SPIDY_RED, 2.5, Qt.DashLine)
         painter.setPen(pen)
         for i in range(len(nodes) - 1):
             painter.drawLine(nodes[i], nodes[i + 1])
 
         # Step badges at each node
         step_symbols = ["①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧"]
-        font = QFont("Segoe UI", 11, QFont.Bold)
+        font = QFont("Calibri", 11, QFont.Bold)
         painter.setFont(font)
 
         for idx, node in enumerate(nodes):
             sym = step_symbols[idx] if idx < len(step_symbols) else str(idx + 1)
             # Glowing node circle
-            painter.setPen(QPen(NEON_CYAN, 2))
+            painter.setPen(QPen(SPIDY_RED, 2))
             painter.setBrush(QBrush(QColor(16, 18, 17, 240)))
             painter.drawEllipse(node, 15, 15)
 
-            painter.setPen(QPen(NEON_CYAN))
+            painter.setPen(QPen(SPIDY_RED))
             node_rect = QRectF(node.x() - 15, node.y() - 15, 30, 30)
             painter.drawText(node_rect, Qt.AlignCenter, sym)
 
         # Title badge above the first node
         if label and nodes:
             first = nodes[0]
-            font_title = QFont("Segoe UI", 9, QFont.Bold)
+            font_title = QFont("Calibri", 10, QFont.Bold)
             painter.setFont(font_title)
             metrics = QFontMetrics(font_title)
             title_w = metrics.horizontalAdvance(label) + 16
             title_h = 24
             title_rect = QRectF(first.x() - title_w / 2.0, first.y() - 44, title_w, title_h)
 
-            painter.setPen(QPen(NEON_CYAN, 1))
+            painter.setPen(QPen(SPIDY_RED, 1))
             painter.setBrush(QBrush(QColor(16, 18, 17, 240)))
             painter.drawRoundedRect(title_rect, 6, 6)
 
@@ -739,11 +748,11 @@ class ClickyCursorOverlay(QWidget):
         painter.restore()
 
     def _draw_visual_text(self, painter: QPainter, gx: int, gy: int, text: str):
-        """Draw an on-screen floating annotation card."""
+        """Draw an on-screen floating annotation card in Calibri."""
         pos = self.mapFromGlobal(QPoint(gx, gy))
 
         painter.save()
-        font = QFont("Segoe UI", 9, QFont.Medium)
+        font = QFont("Calibri", 10)
         painter.setFont(font)
         metrics = QFontMetrics(font)
 
@@ -762,39 +771,66 @@ class ClickyCursorOverlay(QWidget):
 
         painter.restore()
 
-    # MARK: - Pointer Triangle, Waveform, Spinner, and Speech Bubble
+    # MARK: - Spidy Spider-Man Mask Pointer, Waveform, Spider-Sense Loading & Bubble
 
-    def _draw_triangle(self, painter: QPainter, x: float, y: float):
+    def _draw_spiderman_icon(self, painter: QPainter, x: float, y: float):
+        """Render iconic Spider-Man mask in signature red with sharp white lenses."""
         painter.save()
         painter.translate(x, y)
         painter.rotate(self.triangle_rotation)
         painter.scale(self.flight_scale, self.flight_scale)
 
-        # Outer blue glow shadow
-        for r in (12, 8, 4):
-            glow_poly = QPolygonF([
-                QPointF(0.0, -9.0 - r * 0.4),
-                QPointF(-8.0 - r * 0.4, 7.0 + r * 0.4),
-                QPointF(8.0 + r * 0.4, 7.0 + r * 0.4),
-            ])
-            painter.setBrush(QBrush(QColor(51, 128, 255, 30)))
+        # 1. Subtle Crimson Outer Drop Shadow / Glow
+        for r in (8, 4):
+            painter.setBrush(QBrush(QColor(220, 38, 38, 35)))
             painter.setPen(Qt.NoPen)
-            painter.drawPolygon(glow_poly)
+            painter.drawEllipse(QRectF(-12.0 - r * 0.4, -14.0 - r * 0.4, 24.0 + r * 0.8, 28.0 + r * 0.8))
 
-        # Solid Clicky Blue Triangle
-        poly = QPolygonF([
-            QPointF(0.0, -9.0),
-            QPointF(-8.0, 7.0),
-            QPointF(8.0, 7.0),
-        ])
-        painter.setBrush(QBrush(CLICKY_BLUE))
-        painter.setPen(QPen(QColor(255, 255, 255, 180), 1.0))
-        painter.drawPolygon(poly)
+        # 2. Signature Mask Contour (Egg-shaped tapered down at chin)
+        mask_path = QPainterPath()
+        mask_path.moveTo(0.0, -13.0)
+        mask_path.cubicTo(11.0, -13.0, 10.0, 4.0, 3.5, 12.0)
+        mask_path.quadTo(0.0, 14.5, -3.5, 12.0)
+        mask_path.cubicTo(-10.0, 4.0, -11.0, -13.0, 0.0, -13.0)
+
+        painter.setBrush(QBrush(SPIDY_RED))
+        painter.setPen(QPen(SPIDY_CRIMSON, 1.2))
+        painter.drawPath(mask_path)
+
+        # 3. Web lattice accents on mask
+        painter.setPen(QPen(SPIDY_CRIMSON, 0.9))
+        # Center vertical web line from forehead to chin
+        painter.drawLine(QPointF(0.0, -13.0), QPointF(0.0, 13.5))
+        # Subtle horizontal web cross-curves
+        painter.drawArc(QRectF(-8.0, -10.0, 16.0, 10.0), 20 * 16, 140 * 16)
+        painter.drawArc(QRectF(-9.5, -4.0, 19.0, 11.0), 20 * 16, 140 * 16)
+        painter.drawArc(QRectF(-7.0, 2.0, 14.0, 10.0), 20 * 16, 140 * 16)
+
+        # 4. Iconic Angular White Eyes / Lenses with Black Outlines
+        # Right Eye
+        r_eye = QPainterPath()
+        r_eye.moveTo(1.5, -4.0)
+        r_eye.lineTo(8.5, -7.5)   # Top slant up to temple
+        r_eye.quadTo(7.5, 0.5, 2.0, 1.5)  # Curved lower contour back to nose
+        r_eye.closeSubpath()
+
+        # Left Eye
+        l_eye = QPainterPath()
+        l_eye.moveTo(-1.5, -4.0)
+        l_eye.lineTo(-8.5, -7.5)  # Top slant up to temple
+        l_eye.quadTo(-7.5, 0.5, -2.0, 1.5) # Curved lower contour back to nose
+        l_eye.closeSubpath()
+
+        # Black thick outer lens border with bright white lens fill
+        painter.setPen(QPen(SPIDY_LENS_BLACK, 1.8, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+        painter.setBrush(QBrush(SPIDY_WEB_WHITE))
+        painter.drawPath(r_eye)
+        painter.drawPath(l_eye)
 
         painter.restore()
 
     def _draw_waveform(self, painter: QPainter, x: float, y: float):
-        """Draw 5 vertical pulsing blue bars reacting to voice loudness."""
+        """Draw 5 vertical pulsing red bars reacting to voice loudness."""
         painter.save()
         painter.translate(x, y)
 
@@ -807,10 +843,10 @@ class ClickyCursorOverlay(QWidget):
         painter.setPen(Qt.NoPen)
 
         # Glow behind waveform
-        painter.setBrush(QBrush(QColor(51, 128, 255, 60)))
+        painter.setBrush(QBrush(QColor(220, 38, 38, 70)))
         painter.drawEllipse(QPointF(0, 0), 16, 16)
 
-        painter.setBrush(QBrush(CLICKY_BLUE))
+        painter.setBrush(QBrush(SPIDY_RED))
         factors = [0.45, 0.75, 1.0, 0.75, 0.45]
         min_height = 4.0
         max_height = 24.0
@@ -823,28 +859,46 @@ class ClickyCursorOverlay(QWidget):
 
         painter.restore()
 
-    def _draw_spinner(self, painter: QPainter, x: float, y: float):
-        """Draw blue glowing circular spinner."""
+    def _draw_spiderman_loading(self, painter: QPainter, x: float, y: float):
+        """Spider-Sense Tingling radar pulse animation during request processing."""
         painter.save()
         painter.translate(x, y)
-        painter.rotate(self.spinner_angle)
 
-        radius = 8.0
-        pen = QPen(CLICKY_BLUE, 2.5)
-        pen.setCapStyle(Qt.RoundCap)
-        painter.setPen(pen)
-        painter.setBrush(Qt.NoBrush)
+        # 1. Spider-Sense Radar Pulse Arcs radiating outward from the temples
+        phase = (self.spinner_angle / 360.0)
+        for i in range(3):
+            wave_phase = (phase + i * 0.33) % 1.0
+            r = 16.0 + wave_phase * 22.0
+            alpha = int(220 * (1.0 - wave_phase))
 
-        rect = QRectF(-radius, -radius, radius * 2, radius * 2)
-        painter.drawArc(rect, 0, 260 * 16)
+            # Left spider-sense arcs (Red to Amber)
+            pen_left = QPen(QColor(239, 68, 68, alpha), 1.8, Qt.SolidLine, Qt.RoundCap)
+            painter.setPen(pen_left)
+            painter.setBrush(Qt.NoBrush)
+            painter.drawArc(QRectF(-r - 3.0, -r - 5.0, r * 2, r * 2), 110 * 16, 50 * 16)
+
+            # Right spider-sense arcs (Electric Amber)
+            pen_right = QPen(QColor(251, 191, 36, alpha), 1.8, Qt.SolidLine, Qt.RoundCap)
+            painter.setPen(pen_right)
+            painter.drawArc(QRectF(-r + 3.0, -r - 5.0, r * 2, r * 2), 20 * 16, 50 * 16)
 
         painter.restore()
 
+        # 2. Draw the Spider-Man mask with gentle breathing pulse
+        old_scale = self.flight_scale
+        self.flight_scale = 1.0 + 0.08 * math.sin(phase * 2 * math.pi)
+        self._draw_spiderman_icon(painter, x, y)
+        self.flight_scale = old_scale
+
+    # Aliases for compatibility
+    _draw_triangle = _draw_spiderman_icon
+    _draw_spinner = _draw_spiderman_loading
+
     def _draw_speech_bubble(self, painter: QPainter, x: float, y: float):
-        """Draw rounded speech bubble next to pointer or cursor."""
+        """Draw rounded speech bubble in Spidy red with Calibri typography."""
         painter.save()
 
-        font = QFont("Segoe UI", 9, QFont.Medium)
+        font = QFont("Calibri", 10, QFont.Bold)
         painter.setFont(font)
         metrics = QFontMetrics(font)
 
@@ -865,14 +919,14 @@ class ClickyCursorOverlay(QWidget):
 
         # Glow shadow
         shadow_rect = QRectF(-2, -2, bubble_w + 4, bubble_h + 4)
-        painter.setBrush(QBrush(QColor(51, 128, 255, 60)))
+        painter.setBrush(QBrush(QColor(220, 38, 38, 70)))
         painter.setPen(Qt.NoPen)
         painter.drawRoundedRect(shadow_rect, 8, 8)
 
-        # Background bubble (Clicky Blue)
+        # Background bubble (Spidy Red)
         bubble_rect = QRectF(0, 0, bubble_w, bubble_h)
-        painter.setBrush(QBrush(CLICKY_BLUE))
-        painter.setPen(QPen(QColor(255, 255, 255, 100), 1.0))
+        painter.setBrush(QBrush(SPIDY_RED))
+        painter.setPen(QPen(QColor(255, 255, 255, 120), 1.0))
         painter.drawRoundedRect(bubble_rect, 6, 6)
 
         # Crisp White Text
