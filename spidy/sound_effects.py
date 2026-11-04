@@ -1,4 +1,4 @@
-"""Athena Sound Effects & Audio Cues Engine.
+"""Spidy Sound Effects & Audio Cues Engine.
 
 Provides pleasant, zero-latency modern chimes for interaction states:
 - Activate (rising dual-tone on push-to-talk press)
@@ -24,9 +24,9 @@ try:
 except ImportError:
     HAS_WINSOUND = False
 
-from athena.config import load_config
+from spidy.config import load_config
 
-logger = logging.getLogger("athena.sound")
+logger = logging.getLogger("spidy.sound")
 
 
 def _generate_tone_wav(

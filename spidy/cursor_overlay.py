@@ -38,8 +38,8 @@ from PyQt5.QtGui import (
     QFontMetrics,
     QCursor,
 )
-from athena.sound_effects import sounds
-from athena.config import load_config
+from spidy.sound_effects import sounds
+from spidy.config import load_config
 from PyQt5.QtWidgets import QWidget, QApplication
 
 # Windows API Constants for click-through transparent overlay
@@ -91,7 +91,7 @@ class OverlaySignals(QObject):
 
 
 class ClickyCursorOverlay(QWidget):
-    """Full-screen click-through transparent overlay window for Clicky and Athena."""
+    """Full-screen click-through transparent overlay window for Clicky and Spidy."""
 
     def __init__(self, parent=None):
         super().__init__(parent)

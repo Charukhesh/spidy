@@ -1,6 +1,6 @@
-"""Athena Active Window & Context Inspector.
+"""Spidy Active Window & Context Inspector.
 
-Provides Deep Context situational awareness to Athena:
+Provides Deep Context situational awareness to Spidy:
 - Inspects active foreground window title
 - Identifies focused application executable and friendly app name
 - Captures currently highlighted/selected text in active window (non-destructively)
@@ -15,7 +15,7 @@ import logging
 from dataclasses import dataclass
 from typing import Optional
 
-logger = logging.getLogger("athena.context")
+logger = logging.getLogger("spidy.context")
 
 # Win32 Constants
 PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
@@ -170,7 +170,7 @@ class ContextInspector:
         original_clip = self._read_clipboard_text()
 
         # 2. Place a unique marker so we know if Ctrl+C copied new content
-        marker = f"__ATHENA_PROBE_{time.time()}__"
+        marker = f"__SPIDY_PROBE_{time.time()}__"
         self._set_clipboard_text(marker)
 
         # 3. Simulate Ctrl+C

@@ -1,9 +1,9 @@
-"""Optional Low-Power Hands-Free Wake Word Detector for Athena.
+"""Optional Low-Power Hands-Free Wake Word Detector for Spidy.
 
 Disabled by default in config.json ("wake_word_enabled": false) to guarantee
 0% background CPU usage and complete audio privacy.
 
-When enabled, monitors microphone input stream for the wake phrase 'Hey Athena'
+When enabled, monitors microphone input stream for the wake phrase 'Hey Spidy'
 and triggers push-to-talk activation hands-free.
 """
 
@@ -14,7 +14,7 @@ from typing import Optional, Callable
 
 from PyQt5.QtCore import QObject, pyqtSignal
 
-logger = logging.getLogger("athena.wake_word")
+logger = logging.getLogger("spidy.wake_word")
 
 
 class WakeWordDetector(QObject):
@@ -22,7 +22,7 @@ class WakeWordDetector(QObject):
 
     wake_word_detected = pyqtSignal()
 
-    def __init__(self, phrase: str = "hey athena", enabled: bool = False, parent=None):
+    def __init__(self, phrase: str = "hey spidy", enabled: bool = False, parent=None):
         super().__init__(parent)
         self.phrase = phrase.lower().strip()
         self.enabled = enabled

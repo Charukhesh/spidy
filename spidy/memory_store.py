@@ -1,9 +1,9 @@
-"""Persistent Long-Term Memory & Knowledge Graph Engine for Athena.
+"""Persistent Long-Term Memory & Knowledge Graph Engine for Spidy.
 
-Provides offline, private SQLite storage in ~/.athena/memory.db for:
+Provides offline, private SQLite storage in ~/.spidy/memory.db for:
 1. User Preferences: Coding language favorites, dark mode, personal workflow habits.
 2. Project Context: Active repositories, milestones, key files.
-3. Interaction History: Multi-day session recall so Athena remembers previous context.
+3. Interaction History: Multi-day session recall so Spidy remembers previous context.
 4. Semantic Prompt Injector: Automatically loads relevant memories into Gemini's context.
 """
 
@@ -15,9 +15,9 @@ import contextlib
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 
-logger = logging.getLogger("athena.memory")
+logger = logging.getLogger("spidy.memory")
 
-DB_DIR = Path.home() / ".athena"
+DB_DIR = Path.home() / ".spidy"
 DB_PATH = DB_DIR / "memory.db"
 
 

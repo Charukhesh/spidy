@@ -1,4 +1,4 @@
-"""Multi-monitor screen capture utility for Athena Windows.
+"""Multi-monitor screen capture utility for Spidy Windows.
 
 Captures screenshots as JPEG bytes with explicit pixel dimensions
 so vision coordinate space maps 1:1 with screen points.

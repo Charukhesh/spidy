@@ -19,7 +19,7 @@ dist/
 credentials.json
 config.local.json
 .clicky/
-.athena/
+.spidy/
 .spidy/
 
 # Cloned External Frameworks (Reverse Engineering Tools)

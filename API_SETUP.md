@@ -1,12 +1,12 @@
-# 🔑 Athena Vision AI Setup & Provider Guide
+# 🔑 Spidy Vision AI Setup & Provider Guide
 
-Athena is designed to operate on **100% free multimodal vision models** with zero mandatory subscriptions. This guide walks you through setting up your preferred AI provider.
+Spidy is designed to operate on **100% free multimodal vision models** with zero mandatory subscriptions. This guide walks you through setting up your preferred AI provider.
 
 ---
 
 ## 🌟 Option 1: Google Gemini (Recommended — 1,000,000 TPM Free)
 
-Google Gemini 3.5 Flash is the recommended provider for Athena. It offers an enormous token quota (1M tokens per minute) and top-tier desktop OCR and coordinate grounding.
+Google Gemini 3.5 Flash is the recommended provider for Spidy. It offers an enormous token quota (1M tokens per minute) and top-tier desktop OCR and coordinate grounding.
 
 ### Step-by-Step Instructions:
 1. Navigate to **[Google AI Studio](https://aistudio.google.com/app/apikey)**.
@@ -14,8 +14,8 @@ Google Gemini 3.5 Flash is the recommended provider for Athena. It offers an eno
 3. Click **"Create API key"**.
 4. Copy the generated key.
    > [!NOTE]
-   > Google's latest keys begin with **`AQ.`** (e.g. `AQ.xxxxxxxx...`). Older keys start with **`AIza...`**. Athena automatically recognizes and supports both formats.
-5. In Athena:
+   > Google's latest keys begin with **`AQ.`** (e.g. `AQ.xxxxxxxx...`). Older keys start with **`AIza...`**. Spidy automatically recognizes and supports both formats.
+5. In Spidy:
    * Open the control panel (click the glowing blue triangle in your taskbar tray).
    * Paste your key into the **API Key** input box.
    * Click **"Test"** — it will turn green with `Connected successfully to Google Gemini using model gemini-3.5-flash!`.
@@ -32,8 +32,8 @@ If you prefer open-weight models running on Groq's high-speed LPUs:
 2. Sign up or log in.
 3. Click **"Create API Key"**.
 4. Copy the key (starts with **`gsk_`**).
-5. Paste it into Athena’s control panel.
-   * Athena automatically recognizes the `gsk_` prefix and switches to Groq's active vision model: **`qwen/qwen3.8-27b`**.
+5. Paste it into Spidy’s control panel.
+   * Spidy automatically recognizes the `gsk_` prefix and switches to Groq's active vision model: **`qwen/qwen3.8-27b`**.
 
 ---
 
@@ -44,13 +44,13 @@ If you want to use the original model from the HeyClicky macOS codebase:
 ### Step-by-Step Instructions:
 1. Navigate to **[xAI Console](https://console.x.ai/)**.
 2. Purchase API credits and generate a key starting with **`xai-`**.
-3. Paste it into Athena’s control panel. Athena will route directly to **`grok-2-vision-1212`**.
+3. Paste it into Spidy’s control panel. Spidy will route directly to **`grok-2-vision-1212`**.
 
 ---
 
 ## 🛠️ Direct Config File Configuration
 
-You can also set your key directly in your home directory config at `~/.athena/config.json`:
+You can also set your key directly in your home directory config at `~/.spidy/config.json`:
 
 ```json
 {

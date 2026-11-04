@@ -13,7 +13,7 @@ from PyQt5.QtCore import QPointF, QPoint
 
 app = QApplication.instance() or QApplication(sys.argv)
 
-from athena.cursor_overlay import ClickyCursorOverlay, SPIDY_RED, SPIDY_CRIMSON, VoiceState, NavigationMode
+from spidy.cursor_overlay import ClickyCursorOverlay, SPIDY_RED, SPIDY_CRIMSON, VoiceState, NavigationMode
 
 
 class TestSpidyVisuals(unittest.TestCase):

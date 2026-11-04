@@ -1,4 +1,4 @@
-"""Automated Test Suite for Athena Everyday Power Pack Features:
+"""Automated Test Suite for Spidy Everyday Power Pack Features:
 1. Sound Effects & Modern Chimes Engine (Activate, Thinking, Arrival Ding)
 2. Active Window & Deep Context Inspector (Foreground Window, Process name, Selected text)
 3. Top-Center Black Glass Dynamic Bar HUD (2-3 mm Bar, Expansion, 1-click Copy, Hover pause)
@@ -36,14 +36,14 @@ from PyQt5.QtCore import QTimer, QEvent, QPointF
 # Initialize Qt Application if not already running
 app = QApplication.instance() or QApplication(sys.argv)
 
-from athena.sound_effects import SoundEffectsEngine, sounds
-from athena.context_inspector import ContextInspector, WindowContext, inspector
-from athena.top_bar_hud import TopBarGlassHUD, TopBarState
-from athena.ai_vision_client import AIVisionClient, PointingTarget, TraceCurveTarget
-from athena.config import load_config, DEFAULT_CONFIG
-from athena.curve_generator import CurveGenerator
-from athena.web_search import web_search
-from athena.cursor_overlay import ClickyCursorOverlay, NavigationMode
+from spidy.sound_effects import SoundEffectsEngine, sounds
+from spidy.context_inspector import ContextInspector, WindowContext, inspector
+from spidy.top_bar_hud import TopBarGlassHUD, TopBarState
+from spidy.ai_vision_client import AIVisionClient, PointingTarget, TraceCurveTarget
+from spidy.config import load_config, DEFAULT_CONFIG
+from spidy.curve_generator import CurveGenerator
+from spidy.web_search import web_search
+from spidy.cursor_overlay import ClickyCursorOverlay, NavigationMode
 
 
 class TestEverydayPowerFeatures(unittest.TestCase):
@@ -74,24 +74,24 @@ class TestEverydayPowerFeatures(unittest.TestCase):
             process_id=999,
             process_name="Code.exe",
             app_name="Visual Studio Code",
-            window_title="companion_manager.py - Athena Agent",
+            window_title="companion_manager.py - Spidy Agent",
             selected_text="def _run_inference_pipeline(self, pcm_data: bytes):",
         )
         prompt_text = ctx.to_prompt_text()
 
         self.assertIn("[ACTIVE APPLICATION CONTEXT]", prompt_text)
         self.assertIn("Visual Studio Code (Code.exe)", prompt_text)
-        self.assertIn("companion_manager.py - Athena Agent", prompt_text)
+        self.assertIn("companion_manager.py - Spidy Agent", prompt_text)
         self.assertIn("def _run_inference_pipeline", prompt_text)
         print("[PASS] Test 2 Passed: Active Window Context formats correctly.")
 
     def test_03_clipboard_probe_safe_restoration(self):
         """Verify clipboard reading and non-destructive snapshot restoration."""
         test_clip = inspector._read_clipboard_text()
-        success = inspector._set_clipboard_text("ATHENA_MOCK_TEST_STRING_12345")
+        success = inspector._set_clipboard_text("SPIDY_MOCK_TEST_STRING_12345")
         if success:
             read_back = inspector._read_clipboard_text()
-            self.assertEqual(read_back, "ATHENA_MOCK_TEST_STRING_12345")
+            self.assertEqual(read_back, "SPIDY_MOCK_TEST_STRING_12345")
             inspector._set_clipboard_text(test_clip)
         print("[PASS] Test 3 Passed: Clipboard snapshot and restoration operates cleanly.")
 

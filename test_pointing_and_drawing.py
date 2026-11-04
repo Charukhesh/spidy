@@ -1,4 +1,4 @@
-"""Automated Benchmark & Verification Suite for Athena's Pointing & Drawing Skills.
+"""Automated Benchmark & Verification Suite for Spidy's Pointing & Drawing Skills.
 
 Tests:
 1. Prompt Pointing Compliance & LLM Grounding Accuracy (Gemini 3.5 Flash)
@@ -24,9 +24,9 @@ from PIL import Image, ImageDraw, ImageFont
 # Ensure workspace root is in path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from athena.ai_vision_client import AIVisionClient, PointingTarget
-from athena.screen_capture import ScreenCaptureResult
-from athena.config import get_api_key
+from spidy.ai_vision_client import AIVisionClient, PointingTarget
+from spidy.screen_capture import ScreenCaptureResult
+from spidy.config import get_api_key
 
 def run_drawing_math_tests() -> Dict[str, Any]:
     """Test the drawing, Bezier trajectory, and coordinate projection mechanics."""

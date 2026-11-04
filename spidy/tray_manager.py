@@ -7,13 +7,13 @@ from PyQt5.QtWidgets import QSystemTrayIcon, QMenu, QAction
 from PyQt5.QtGui import QIcon, QPixmap, QPainter, QColor, QPolygonF
 from PyQt5.QtCore import QPointF, Qt
 
-from athena.companion_panel import CompanionPanel
+from spidy.companion_panel import CompanionPanel
 
-ATHENA_BLUE = QColor("#3380FF")
+SPIDY_RED = QColor("#3380FF")
 
 
-def create_athena_icon() -> QIcon:
-    """Dynamically generate a high-DPI 32x32 glowing blue triangle Athena icon."""
+def create_spidy_icon() -> QIcon:
+    """Dynamically generate a high-DPI 32x32 glowing blue triangle Spidy icon."""
     pixmap = QPixmap(32, 32)
     pixmap.fill(Qt.transparent)
 
@@ -25,7 +25,7 @@ def create_athena_icon() -> QIcon:
         QPointF(4.0, 26.0),
         QPointF(28.0, 26.0),
     ])
-    painter.setBrush(ATHENA_BLUE)
+    painter.setBrush(SPIDY_RED)
     painter.setPen(Qt.NoPen)
     painter.drawPolygon(poly)
     painter.end()
@@ -34,7 +34,7 @@ def create_athena_icon() -> QIcon:
 
 
 # Backwards compatibility alias
-create_clicky_icon = create_athena_icon
+create_clicky_icon = create_spidy_icon
 
 
 class TrayManager:
@@ -54,8 +54,8 @@ class TrayManager:
         if on_test_demo:
             self.panel.demo_requested.connect(on_test_demo)
 
-        self.tray_icon = QSystemTrayIcon(create_athena_icon(), self.app)
-        self.tray_icon.setToolTip("Athena — Everyday AI Desktop Companion")
+        self.tray_icon = QSystemTrayIcon(create_spidy_icon(), self.app)
+        self.tray_icon.setToolTip("Spidy — Everyday AI Desktop Companion")
 
         # Click on tray icon toggles Companion Panel
         self.tray_icon.activated.connect(self._on_tray_activated)
@@ -81,7 +81,7 @@ class TrayManager:
 
         self.menu.addSeparator()
 
-        quit_action = QAction("Quit Athena", self.menu)
+        quit_action = QAction("Quit Spidy", self.menu)
         quit_action.triggered.connect(self.app.quit)
         self.menu.addAction(quit_action)
 

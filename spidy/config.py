@@ -1,5 +1,5 @@
-"""Configuration manager for Athena Everyday Desktop Companion.
-Stores settings in ~/.athena/config.json
+"""Configuration manager for Spidy Everyday Desktop Companion.
+Stores settings in ~/.spidy/config.json
 """
 
 import os
@@ -8,8 +8,8 @@ import shutil
 from pathlib import Path
 from typing import Dict, Any
 
-ATHENA_DIR = Path.home() / ".athena"
-ATHENA_CONFIG = ATHENA_DIR / "config.json"
+SPIDY_DIR = Path.home() / ".spidy"
+SPIDY_CONFIG = SPIDY_DIR / "config.json"
 
 SPIDY_DIR = Path.home() / ".spidy"
 SPIDY_CONFIG = SPIDY_DIR / "config.json"
@@ -42,14 +42,14 @@ DEFAULT_CONFIG: Dict[str, Any] = {
 
 def load_config() -> Dict[str, Any]:
     SPIDY_DIR.mkdir(parents=True, exist_ok=True)
-    ATHENA_DIR.mkdir(parents=True, exist_ok=True)
+    SPIDY_DIR.mkdir(parents=True, exist_ok=True)
 
-    # Auto-migrate from ~/.athena or ~/.clicky if Spidy config does not exist
-    active_config_path = SPIDY_CONFIG if SPIDY_CONFIG.exists() else ATHENA_CONFIG
+    # Auto-migrate from ~/.spidy or ~/.clicky if Spidy config does not exist
+    active_config_path = SPIDY_CONFIG if SPIDY_CONFIG.exists() else SPIDY_CONFIG
     if not active_config_path.exists():
-        if ATHENA_CONFIG.exists():
+        if SPIDY_CONFIG.exists():
             try:
-                shutil.copy2(ATHENA_CONFIG, SPIDY_CONFIG)
+                shutil.copy2(SPIDY_CONFIG, SPIDY_CONFIG)
                 active_config_path = SPIDY_CONFIG
             except Exception:
                 pass
@@ -75,7 +75,7 @@ def load_config() -> Dict[str, Any]:
             # If no valid API key is present in user config, pull from legacy configs
             current_k = merged.get("api_key") or merged.get("grok_api_key", "")
             if not current_k or current_k.startswith("YOUR_") or "PLACEHOLDER" in current_k.upper():
-                for fallback_cfg in (ATHENA_CONFIG, LEGACY_CLICKY_CONFIG):
+                for fallback_cfg in (SPIDY_CONFIG, LEGACY_CLICKY_CONFIG):
                     if fallback_cfg.exists():
                         try:
                             with open(fallback_cfg, "r", encoding="utf-8") as lf:
@@ -100,13 +100,13 @@ def load_config() -> Dict[str, Any]:
 
 def save_config(config: Dict[str, Any]) -> None:
     SPIDY_DIR.mkdir(parents=True, exist_ok=True)
-    ATHENA_DIR.mkdir(parents=True, exist_ok=True)
+    SPIDY_DIR.mkdir(parents=True, exist_ok=True)
     # Ensure backwards compatible keys are mirrored
     if "api_key" in config:
         config["grok_api_key"] = config["api_key"]
     if "model" in config:
         config["grok_model"] = config["model"]
-    for out_path in (SPIDY_CONFIG, ATHENA_CONFIG):
+    for out_path in (SPIDY_CONFIG, SPIDY_CONFIG):
         try:
             with open(out_path, "w", encoding="utf-8") as f:
                 json.dump(config, f, indent=2)

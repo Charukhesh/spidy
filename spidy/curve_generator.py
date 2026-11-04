@@ -1,4 +1,4 @@
-"""Mathematical Curve and Visual Trajectory Generator for Athena.
+"""Mathematical Curve and Visual Trajectory Generator for Spidy.
 
 Generates smooth 2D polylines for mathematical functions, geometric curves,
 and visual demonstrations centered directly around a specified anchor point

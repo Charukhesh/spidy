@@ -1,4 +1,4 @@
-"""Athena Top-Center Black Glass Dynamic Bar HUD.
+"""Spidy Top-Center Black Glass Dynamic Bar HUD.
 
 A sleek, aesthetic top-center glass dynamic island inspired by Clicky:
 - Idle State: 2-3 mm thickness (~10px height, 110px width) obsidian black glass bar pinned to top-center.
@@ -37,7 +37,7 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtGui import QFont, QColor, QCursor, QPainter, QBrush, QPen
 
-logger = logging.getLogger("athena.top_bar_hud")
+logger = logging.getLogger("spidy.top_bar_hud")
 
 
 class TopBarState(Enum):
@@ -150,7 +150,7 @@ class TopBarGlassHUD(QWidget):
         header_row = QHBoxLayout()
         header_row.setContentsMargins(0, 0, 0, 0)
 
-        self.brand_label = QLabel("✦ Athena", self.content_widget)
+        self.brand_label = QLabel("✦ Spidy", self.content_widget)
         self.brand_label.setStyleSheet(f"""
             color: {self.COLOR_ACCENT_GLOW};
             font-size: 12px;

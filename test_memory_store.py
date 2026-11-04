@@ -1,4 +1,4 @@
-"""Automated Unit Tests for Athena Persistent Long-Term Memory Store."""
+"""Automated Unit Tests for Spidy Persistent Long-Term Memory Store."""
 
 import sys
 import unittest
@@ -8,7 +8,7 @@ from pathlib import Path
 # Add project root to sys.path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from athena.memory_store import MemoryStore
+from spidy.memory_store import MemoryStore
 
 
 class TestMemoryStore(unittest.TestCase):
@@ -43,13 +43,13 @@ class TestMemoryStore(unittest.TestCase):
 
     def test_02_prompt_formatting_injection(self):
         """Verify prompt formatting context injection."""
-        self.store.store_memory("project", "main_repo", "Athena Desktop Companion with Gemini vision")
+        self.store.store_memory("project", "main_repo", "Spidy Desktop Companion with Gemini vision")
         self.store.store_memory("preference", "ui_theme", "Dark glass mode with neon accents")
 
         prompt_context = self.store.format_memories_for_prompt("What is my main repo?")
         self.assertIn("[REMEMBERED USER PREFERENCES & CONTEXT]", prompt_context)
         self.assertIn("Main_Repo", prompt_context)
-        self.assertIn("Athena Desktop Companion", prompt_context)
+        self.assertIn("Spidy Desktop Companion", prompt_context)
 
     def test_03_session_logs_and_summary(self):
         """Verify session logging and multi-day work summary."""

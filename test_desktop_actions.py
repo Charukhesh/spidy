@@ -1,4 +1,4 @@
-"""Automated Unit Tests for Athena Desktop Actions & System Controller."""
+"""Automated Unit Tests for Spidy Desktop Actions & System Controller."""
 
 import sys
 import unittest
@@ -10,7 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from PyQt5.QtWidgets import QApplication
 app = QApplication.instance() or QApplication(sys.argv)
 
-from athena.desktop_actions import desktop_actions, DesktopActionController
+from spidy.desktop_actions import desktop_actions, DesktopActionController
 
 
 class TestDesktopActions(unittest.TestCase):
@@ -25,7 +25,7 @@ class TestDesktopActions(unittest.TestCase):
 
     def test_02_clipboard_get_and_set(self):
         """Verify reliable clipboard read and write."""
-        test_payload = "ATHENA_DESKTOP_ACTION_TEST_STRING_7788"
+        test_payload = "SPIDY_DESKTOP_ACTION_TEST_STRING_7788"
         success = desktop_actions.set_clipboard_text(test_payload)
         self.assertTrue(success)
 

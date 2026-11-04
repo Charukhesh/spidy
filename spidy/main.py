@@ -1,4 +1,4 @@
-"""Athena Everyday Desktop Companion for Windows.
+"""Spidy Everyday Desktop Companion for Windows.
 
 Entry point initializing:
 - High-DPI PyQt5 application
@@ -16,10 +16,10 @@ from PyQt5.QtCore import Qt
 # Ensure package import works from root
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from athena.config import load_config
-from athena.cursor_overlay import ClickyCursorOverlay
-from athena.companion_manager import CompanionManager
-from athena.tray_manager import TrayManager
+from spidy.config import load_config
+from spidy.cursor_overlay import ClickyCursorOverlay
+from spidy.companion_manager import CompanionManager
+from spidy.tray_manager import TrayManager
 
 logging.basicConfig(
     level=logging.INFO,

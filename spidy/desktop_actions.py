@@ -1,4 +1,4 @@
-"""Desktop Actions & System Controller for Athena.
+"""Desktop Actions & System Controller for Spidy.
 
 Provides hands-on local OS capabilities without opening terminal windows:
 1. Application & Path Launcher: Opens apps (Spotify, VS Code, Chrome, etc.) and folders.
@@ -18,7 +18,7 @@ from typing import Tuple, Optional, Dict, Any
 
 from PyQt5.QtWidgets import QApplication
 
-logger = logging.getLogger("athena.actions")
+logger = logging.getLogger("spidy.actions")
 
 # Windows API Constants
 SW_HIDE = 0
@@ -197,6 +197,7 @@ class DesktopActionController:
             if app:
                 clip = app.clipboard()
                 clip.setText(text)
+                app.processEvents()
                 return True
         except Exception as e:
             logger.debug(f"Qt clipboard write notice: {e}")

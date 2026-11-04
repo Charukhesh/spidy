@@ -1,4 +1,4 @@
-"""Visual Scratchpad & High-Resolution OCR Extraction Engine for Athena.
+"""Visual Scratchpad & High-Resolution OCR Extraction Engine for Spidy.
 
 Provides:
 1. Focal Mouse Cropping: Crops high-resolution regions around the mouse cursor for target OCR.
@@ -13,11 +13,11 @@ import logging
 from typing import List, Optional, Tuple
 from PIL import Image
 
-from athena.screen_capture import ScreenCaptureResult
-from athena.desktop_actions import desktop_actions
-from athena.sound_effects import sounds
+from spidy.screen_capture import ScreenCaptureResult
+from spidy.desktop_actions import desktop_actions
+from spidy.sound_effects import sounds
 
-logger = logging.getLogger("athena.scratchpad")
+logger = logging.getLogger("spidy.scratchpad")
 
 
 class VisualScratchpad:

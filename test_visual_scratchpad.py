@@ -1,4 +1,4 @@
-"""Automated Unit Tests for Athena Visual Scratchpad & Focal OCR Cropper."""
+"""Automated Unit Tests for Spidy Visual Scratchpad & Focal OCR Cropper."""
 
 import sys
 import io
@@ -12,9 +12,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from PyQt5.QtWidgets import QApplication
 app = QApplication.instance() or QApplication(sys.argv)
 
-from athena.screen_capture import ScreenCaptureResult
-from athena.visual_scratchpad import scratchpad, VisualScratchpad
-from athena.desktop_actions import desktop_actions
+from spidy.screen_capture import ScreenCaptureResult
+from spidy.visual_scratchpad import scratchpad, VisualScratchpad
+from spidy.desktop_actions import desktop_actions
 
 
 class TestVisualScratchpad(unittest.TestCase):

@@ -1,8 +1,8 @@
-"""Backward compatibility alias for Athena TopBarGlassHUD.
+"""Backward compatibility alias for Spidy TopBarGlassHUD.
 Redirects FloatingHistoryCard to TopBarGlassHUD.
 """
 
-from athena.top_bar_hud import TopBarGlassHUD, TopBarState
+from spidy.top_bar_hud import TopBarGlassHUD, TopBarState
 
 # Backward compatibility alias
 FloatingHistoryCard = TopBarGlassHUD

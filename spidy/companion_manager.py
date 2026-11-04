@@ -1,4 +1,4 @@
-"""Central Companion Manager for Athena Everyday Desktop Companion.
+"""Central Companion Manager for Spidy Everyday Desktop Companion.
 
 Orchestrates:
 - Hardware-level Push-to-Talk hotkey detection via GetAsyncKeyState for unified 'Ctrl+Alt'
@@ -24,25 +24,25 @@ from typing import Optional, List, Tuple
 from PyQt5.QtCore import QObject, pyqtSignal, QTimer
 from PyQt5.QtWidgets import QApplication
 
-from athena.config import load_config
-from athena.audio_recorder import AudioRecorder
-from athena.stt_engine import SpeechToText
-from athena.tts_engine import TextToSpeech
-from athena.screen_capture import ScreenCaptureUtility, ScreenCaptureResult
-from athena.ai_vision_client import AIVisionClient, GrokClient, PointingTarget, VisualDrawing
-from athena.cursor_overlay import ClickyCursorOverlay, VoiceState
-from athena.sound_effects import sounds
-from athena.context_inspector import inspector
-from athena.top_bar_hud import TopBarGlassHUD
-from athena.beige_card_hud import BeigeCardHUD
-from athena.curve_generator import CurveGenerator
-from athena.web_search import web_search
-from athena.desktop_actions import desktop_actions
-from athena.memory_store import memory_store
-from athena.visual_scratchpad import scratchpad
-from athena.wake_word import WakeWordDetector
+from spidy.config import load_config
+from spidy.audio_recorder import AudioRecorder
+from spidy.stt_engine import SpeechToText
+from spidy.tts_engine import TextToSpeech
+from spidy.screen_capture import ScreenCaptureUtility, ScreenCaptureResult
+from spidy.ai_vision_client import AIVisionClient, GrokClient, PointingTarget, VisualDrawing
+from spidy.cursor_overlay import ClickyCursorOverlay, VoiceState
+from spidy.sound_effects import sounds
+from spidy.context_inspector import inspector
+from spidy.top_bar_hud import TopBarGlassHUD
+from spidy.beige_card_hud import BeigeCardHUD
+from spidy.curve_generator import CurveGenerator
+from spidy.web_search import web_search
+from spidy.desktop_actions import desktop_actions
+from spidy.memory_store import memory_store
+from spidy.visual_scratchpad import scratchpad
+from spidy.wake_word import WakeWordDetector
 
-logger = logging.getLogger("athena.companion")
+logger = logging.getLogger("spidy.companion")
 
 # Windows Virtual Key Codes
 VK_SHIFT = 0x10
@@ -270,7 +270,7 @@ class CompanionManager(QObject):
                     active_context=active_context_str,
                     audio_bytes=wav_bytes,
                 )
-                logger.info(f"Athena AI replied: '{ai_response.spoken_text}'")
+                logger.info(f"Spidy AI replied: '{ai_response.spoken_text}'")
 
                 # Determine prompt text to display in Top-Center Glass HUD
                 display_query = (ai_response.heard_prompt or transcript or "Voice Request").strip()
@@ -316,7 +316,7 @@ class CompanionManager(QObject):
                 # Register new search offer if LLM offered one
                 if ai_response.offer_search:
                     self.pending_search_query = ai_response.offer_search
-                    logger.info(f"Athena offered web search: '{self.pending_search_query}'")
+                    logger.info(f"Spidy offered web search: '{self.pending_search_query}'")
 
                 # 2.2 Handle Desktop Actions (launch, window, clipboard, ocr)
                 if ai_response.action_type and self.config.get("desktop_actions_enabled", True):
@@ -521,10 +521,10 @@ class CompanionManager(QObject):
         target_y = (primary_geom.top() + primary_geom.height() // 3) if primary_geom else 360
 
         sounds.play_activate()
-        self.overlay.point_to(target_x, target_y, "hey! i'm athena")
+        self.overlay.point_to(target_x, target_y, "hey! i'm spidy")
         self.overlay.set_voice_state(VoiceState.RESPONDING)
 
-        welcome_text = "hey! i'm athena. hold control plus alt anytime and talk to me."
+        welcome_text = "hey! i'm spidy. hold control plus alt anytime and talk to me."
 
         if self.config.get("top_bar_hud_enabled", False) and self.top_bar_hud:
             self.sig_show_response.emit(welcome_text, "Who are you?")

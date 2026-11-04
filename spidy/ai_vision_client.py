@@ -1,4 +1,4 @@
-"""AI Vision Client for Athena Desktop Companion.
+"""AI Vision Client for Spidy Desktop Companion.
 
 Supports:
 1. Google Gemini (aistudio.google.com) - gemini-3.5-flash-lite / gemini-3.5-flash (1,000,000 TPM Free Tier)
@@ -20,9 +20,9 @@ from dataclasses import dataclass, field
 from typing import List, Optional, Tuple, Dict, Any
 import httpx
 
-from athena.screen_capture import ScreenCaptureResult
-from athena.config import get_api_key, load_config
-from athena.memory_store import memory_store
+from spidy.screen_capture import ScreenCaptureResult
+from spidy.config import get_api_key, load_config
+from spidy.memory_store import memory_store
 
 logger = logging.getLogger("spidy.ai_client")
 
@@ -94,7 +94,7 @@ it's basically the structural skeleton of every webpage on the internet, definin
 """
 
 # Backwards compatibility aliases
-ATHENA_SYSTEM_PROMPT = SPIDY_SYSTEM_PROMPT
+SPIDY_SYSTEM_PROMPT = SPIDY_SYSTEM_PROMPT
 OFFICIAL_CLICKY_SYSTEM_PROMPT = SPIDY_SYSTEM_PROMPT
 
 
@@ -139,7 +139,7 @@ GrokResponse = AIVisionResponse
 
 
 class AIVisionClient:
-    """Universal multimodal AI vision client for Athena with Direct Audio and Visual Grounding."""
+    """Universal multimodal AI vision client for Spidy with Direct Audio and Visual Grounding."""
 
     def __init__(self, api_key: Optional[str] = None, model: Optional[str] = None):
         cfg = load_config()
@@ -231,8 +231,8 @@ class AIVisionClient:
         """Send user voice audio/transcript, active window context, and screen capture(s) to multimodal vision LLM."""
         if not self.api_key or self.api_key.startswith("YOUR_") or "PLACEHOLDER" in self.api_key.upper():
             return AIVisionResponse(
-                full_text="please enter your api key in the athena settings first [POINT:none]",
-                spoken_text="please enter your api key in the athena settings first",
+                full_text="please enter your api key in the spidy settings first [POINT:none]",
+                spoken_text="please enter your api key in the spidy settings first",
             )
 
         provider_name, endpoint_url, active_model = self._resolve_provider_and_model()
@@ -287,7 +287,7 @@ class AIVisionClient:
 
         # Assemble full conversation history
         messages: List[Dict[str, Any]] = [
-            {"role": "system", "content": ATHENA_SYSTEM_PROMPT}
+            {"role": "system", "content": SPIDY_SYSTEM_PROMPT}
         ]
 
         for prev_user, prev_assistant in self.conversation_history[-self.history_limit:]:

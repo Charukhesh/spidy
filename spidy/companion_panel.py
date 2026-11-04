@@ -1,4 +1,4 @@
-"""Companion Control Panel for Athena Everyday Desktop Companion.
+"""Companion Control Panel for Spidy Everyday Desktop Companion.
 
 Faithful recreation and enhancement of CompanionPanelView.swift:
 - Width 330px
@@ -34,7 +34,7 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt, QPoint, pyqtSignal, QTimer
 from PyQt5.QtGui import QColor, QFont, QCursor
 
-from athena.config import (
+from spidy.config import (
     load_config,
     save_config,
     get_api_key,
@@ -42,10 +42,10 @@ from athena.config import (
     get_grok_api_key,
     set_grok_api_key,
 )
-from athena.ai_vision_client import AIVisionClient, GrokClient
-from athena.sound_effects import sounds
+from spidy.ai_vision_client import AIVisionClient, GrokClient
+from spidy.sound_effects import sounds
 
-ATHENA_BLUE = "#3380FF"
+SPIDY_RED = "#3380FF"
 
 
 class CompanionPanel(QWidget):
@@ -92,7 +92,7 @@ class CompanionPanel(QWidget):
         layout.setContentsMargins(16, 14, 16, 14)
         layout.setSpacing(10)
 
-        # 1. Header (Status dot, Athena title, Close)
+        # 1. Header (Status dot, Spidy title, Close)
         header = QHBoxLayout()
         header.setSpacing(8)
 
@@ -100,7 +100,7 @@ class CompanionPanel(QWidget):
         self.dot.setStyleSheet("color: #3380FF; font-size: 14px; border: none;")
         header.addWidget(self.dot)
 
-        title = QLabel("Athena")
+        title = QLabel("Spidy")
         title.setFont(QFont("Segoe UI", 11, QFont.Bold))
         title.setStyleSheet("color: #FFFFFF; border: none;")
         header.addWidget(title)
@@ -152,7 +152,7 @@ class CompanionPanel(QWidget):
         row1 = QHBoxLayout()
         icon1 = QLabel("✦")
         icon1.setStyleSheet("color: #60a5fa; border: none; font-size: 14px; font-weight: bold;")
-        t1 = QLabel("Hold Ctrl + Alt: Athena Voice & Vision")
+        t1 = QLabel("Hold Ctrl + Alt: Spidy Voice & Vision")
         t1.setFont(QFont("Segoe UI", 9, QFont.DemiBold))
         t1.setStyleSheet("color: #E2E2E8; border: none;")
         row1.addWidget(icon1)
@@ -378,7 +378,7 @@ class CompanionPanel(QWidget):
         footer = QHBoxLayout()
         footer.addStretch()
 
-        quit_btn = QPushButton("Quit Athena")
+        quit_btn = QPushButton("Quit Spidy")
         quit_btn.setStyleSheet("""
             QPushButton {
                 background: transparent;

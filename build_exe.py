@@ -28,7 +28,7 @@ def build():
 from PyInstaller.utils.hooks import collect_data_files
 from PyInstaller.utils.hooks import collect_dynamic_libs
 
-datas = [(r'{root_dir / "athena"}', 'athena')]
+datas = [(r'{root_dir / "spidy"}', 'spidy')]
 binaries = []
 datas += collect_data_files('ctranslate2')
 datas += collect_data_files('faster_whisper')

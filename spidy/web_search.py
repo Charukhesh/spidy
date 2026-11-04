@@ -1,4 +1,4 @@
-"""Web Search & Grounded Web Verification Engine for Athena.
+"""Web Search & Grounded Web Verification Engine for Spidy.
 
 Provides:
 1. Browser Tab Opener: Automatically opens Google Search in the default web browser.
@@ -14,7 +14,7 @@ import webbrowser
 from typing import List, Dict, Any, Optional
 import httpx
 
-logger = logging.getLogger("athena.web_search")
+logger = logging.getLogger("spidy.web_search")
 
 DEFAULT_USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "

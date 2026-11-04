@@ -34,7 +34,7 @@ from PyQt5.QtWidgets import (
     QGraphicsDropShadowEffect,
 )
 from PyQt5.QtGui import QFont, QColor, QCursor, QPainter, QBrush, QPen, QIcon
-from athena.sound_effects import sounds
+from spidy.sound_effects import sounds
 
 logger = logging.getLogger("spidy.beige_hud")
 

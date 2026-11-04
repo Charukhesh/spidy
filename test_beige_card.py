@@ -10,7 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from PyQt5.QtWidgets import QApplication
 app = QApplication.instance() or QApplication(sys.argv)
 
-from athena.beige_card_hud import BeigeCardHUD
+from spidy.beige_card_hud import BeigeCardHUD
 
 
 class TestBeigeCardHUD(unittest.TestCase):
