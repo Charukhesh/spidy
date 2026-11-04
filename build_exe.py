@@ -9,6 +9,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
+
 def build():
     root_dir = Path(__file__).resolve().parent
     dist_dir = root_dir / "dist"
@@ -16,6 +17,12 @@ def build():
     downloads_dir = Path.home() / "Downloads"
     target_exe = downloads_dir / "spidy.exe"
     spec_path = root_dir / "spidy.spec"
+
+    # Terminate any lingering spidy.exe process so target file is writable
+    try:
+        subprocess.run(["taskkill", "/F", "/IM", "spidy.exe"], capture_output=True)
+    except Exception:
+        pass
 
     # Clean up previous build artifacts
     shutil.rmtree(dist_dir, ignore_errors=True)
@@ -41,6 +48,7 @@ a = Analysis(
     datas=datas,
     hiddenimports=[
         'PyQt5', 'PyQt5.QtCore', 'PyQt5.QtGui', 'PyQt5.QtWidgets',
+        'PyQt5.QtWebEngineWidgets', 'PyQt5.QtWebEngineCore',
         'faster_whisper', 'ctranslate2', 'edge_tts', 'mss', 'httpx',
         'PIL', 'winsound', 'psutil', 'sqlite3'
     ],
@@ -56,9 +64,7 @@ a = Analysis(
         'statsmodels', 'seaborn', 'cv2', 'skimage', 'sklearn',
         'nltk', 'astropy', 'botocore', 'sqlalchemy', 'plotly',
         'panel', 'dask', 'distributed', 'numba',
-        'PyQt5.QtWebEngineCore', 'PyQt5.QtWebEngineWidgets',
         'PyQt5.QtQml', 'PyQt5.QtQuick', 'PyQt5.QtQuickWidgets',
-        'PyQt5.QtPositioning', 'PyQt5.QtPrintSupport',
         'PyQt5.QtBluetooth', 'PyQt5.QtNfc', 'PyQt5.QtSensors'
     ],
     noarchive=False,
@@ -128,6 +134,7 @@ exe = EXE(
     except Exception as e:
         print(f"[ERROR] Failed to copy spidy.exe to Downloads: {e}")
         return False
+
 
 if __name__ == "__main__":
     success = build()

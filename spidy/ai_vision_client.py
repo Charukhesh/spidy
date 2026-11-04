@@ -14,6 +14,7 @@ guide arrows [DRAW:arrow,x1,y1,x2,y2:label], and step simulation [SIMULATE:x1,y1
 
 import re
 import json
+import time
 import base64
 import logging
 from dataclasses import dataclass, field
@@ -21,9 +22,10 @@ from typing import List, Optional, Tuple, Dict, Any
 import httpx
 
 from spidy.screen_capture import ScreenCaptureResult
-from spidy.config import get_api_key, load_config
+from spidy.config import get_api_key, get_all_provider_keys, load_config
 from spidy.memory_store import memory_store
 from spidy.realtime_graphics import RealtimeGraphicSpec
+from spidy.scene_3d_spec import Scene3DSpec
 
 logger = logging.getLogger("spidy.ai_client")
 
@@ -54,17 +56,21 @@ you have a small glowing red spider-man mask cursor and visual overlay engine th
 4. Coordinates are in 0..1000 normalized space ((0,0) top-left, (1000,1000) bottom-right).
 5. If no pointing or drawing is needed, append [POINT:none].
 
-real-time graphics (RTG):
-you have a zero-compute real-time vector graphics engine. whenever a visual explanation, cutaway diagram, or hardware walkthrough provides immense clarity, append one of these tags:
-1. Contextual Visual Tutoring Card:
-   use when explaining educational concepts, code logic, or tensors from the screen.
+real-time visuals & interactive 3d engine:
+you have two powerful spatial visual engines that render directly near the user's cursor:
+1. Interactive 3D PBR WebGL Viewport ([SCENE_3D: ...]):
+   whenever the user asks to see something in 3D ("show me in 3D", "3D model", "3D cutaway", "how does a differential gear work in 3D", "show me a DNA helix in 3D", "show me an engine cutaway in 3D", "show me an atom in 3D", "solar system", "heart pump 3D", etc.):
+   append [SCENE_3D: {"title": "<concept title>", "entity": "f35|dna_helix|jet_engine|differential_gears|heart_pump|solar_system|atom|neural_net|robot_arm|generic", "cutaway": true|false, "animation": "spin|pulse|oscillate|none", "primitives": []}]
+   the user can freely click and drag to orbit 360°, zoom in/out with the scroll wheel, and inspect inside.
+2. Contextual Visual Tutoring Card:
+   use when explaining educational concepts, algorithms, code logic, or tensors from the screen.
    [DIAGRAM: {"title": "<concept title>", "summary": "<1-line takeaway>", "nodes": [{"label": "Input", "sublabel": "shape/value"}, {"label": "Target", "sublabel": "prediction"}], "loop": ["Guess", "Compare", "Adjust"], "equation": "<optional formula>"}]
-2. Mechanical & Physics Cutaway Schematic:
-   use when explaining how machines, engines, jets, or physics mechanisms operate.
-   [CUTAWAY: {"title": "<system title>", "principle": "<e.g. push air down -> lift up>", "components": [{"name": "Lift Fan", "desc": "Counter-rotating air column"}, {"name": "Swivel Nozzle", "desc": "3-bearing vector duct"}], "vectors": [{"label": "Downward Thrust"}]}]
-3. Step-by-Step Hardware & Connector Assembly:
+3. Universal Procedural Cutaway Schematic:
+   use when explaining how machines, engines, jets, brakes, or physics mechanisms operate.
+   [CUTAWAY: {"title": "<system title>", "principle": "<e.g. push air down -> lift up>", "components": [{"name": "Subsystem 1", "desc": "Role description"}, {"name": "Subsystem 2", "desc": "Role description"}], "vectors": [{"label": "Force/Flow Vector"}]}]
+4. Step-by-Step Hardware & Connector Assembly:
    use when guiding physical assembly, ribbon cables, pinouts, or board headers.
-   [ASSEMBLY: {"title": "<guide title>", "board": "Raspberry Pi 5", "pin_info": "22-pin ribbon, contacts facing inward", "steps": [{"action": "Gently lift retaining collar", "detail": "Pull straight up 1mm"}, {"action": "Slide ribbon into slot", "detail": "Ensure contacts align"}, {"action": "Press collar down firmly", "detail": "Locks cable in place"}]}]
+   [ASSEMBLY: {"title": "<guide title>", "board": "<Hardware Board Name>", "pin_info": "<Pinout or orientation info>", "steps": [{"action": "Action 1", "detail": "Tips"}, {"action": "Action 2", "detail": "Tips"}]}]
 
 web search verification:
 - if the user asks any question that requires external fact-checking, live web verification, recent sports scores, real-time news, or pricing:
@@ -146,6 +152,7 @@ class AIVisionResponse:
     action_arg: str = ""
     remember_item: Optional[Tuple[str, str, str]] = None
     realtime_graphic: Optional[RealtimeGraphicSpec] = None
+    scene_3d: Optional[Scene3DSpec] = None
 
 
 # Backward compatibility alias
@@ -164,44 +171,144 @@ class AIVisionClient:
 
     def _resolve_provider_and_model(self) -> Tuple[str, str, str]:
         """Detect provider, endpoint URL, and compatible model based on API key."""
-        key = self.api_key.strip()
+        key = (self.api_key or "").strip()
 
         # 1. Google Gemini (aistudio.google.com) -> starts with 'AQ.' or 'AIza'
         if key.startswith("AQ.") or key.startswith("AIza") or "gemini" in self.configured_model.lower():
             endpoint = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
-            if self.configured_model in ("gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-3-flash-preview"):
-                model = self.configured_model
-            else:
-                model = "gemini-3.1-flash-lite"
+            model = self.configured_model if (self.configured_model and self.configured_model != "auto") else "gemini-2.0-flash"
             return "Google Gemini (aistudio.google.com)", endpoint, model
 
-        # 2. Groq (console.groq.com) -> starts with 'gsk_'
+        # 2. xAI Grok (console.x.ai) -> starts with 'xai-'
+        if key.startswith("xai-") or "grok" in self.configured_model.lower():
+            endpoint = "https://api.x.ai/v1/chat/completions"
+            model = self.configured_model if (self.configured_model and self.configured_model != "auto") else "grok-2-vision-1212"
+            return "xAI Grok (console.x.ai)", endpoint, model
+
+        # 3. OpenRouter (openrouter.ai) -> starts with 'sk-or-'
+        if key.startswith("sk-or-"):
+            endpoint = "https://openrouter.ai/api/v1/chat/completions"
+            model = self.configured_model if (self.configured_model and self.configured_model != "auto") else "google/gemini-2.0-flash-exp:free"
+            return "OpenRouter (openrouter.ai)", endpoint, model
+
+        # 4. NVIDIA NIM (build.nvidia.com) -> starts with 'nvapi-'
+        if key.startswith("nvapi-"):
+            endpoint = "https://integrate.api.nvidia.com/v1/chat/completions"
+            model = self.configured_model if (self.configured_model and self.configured_model != "auto") else "meta/llama-3.2-11b-vision-instruct"
+            return "NVIDIA NIM (build.nvidia.com)", endpoint, model
+
+        # 5. Groq (console.groq.com) -> starts with 'gsk_'
         if key.startswith("gsk_"):
             endpoint = "https://api.groq.com/openai/v1/chat/completions"
-            model = (
-                self.configured_model
-                if self.configured_model not in (
-                    "auto",
-                    "grok-2-vision-1212",
-                    "grok-vision-beta",
-                    "llama-3.2-11b-vision-preview",
-                    "llama-3.2-90b-vision-preview",
-                    "gemini-2.0-flash",
-                    "gemini-1.5-flash",
-                    "gemini-3.5-flash",
-                )
-                else "qwen/qwen3.8-27b"
-            )
+            model = self.configured_model if (self.configured_model and self.configured_model != "auto") else "qwen/qwen3.8-27b"
             return "Groq (console.groq.com)", endpoint, model
 
-        # 3. xAI Grok (console.x.ai) -> starts with 'xai-'
-        endpoint = "https://api.x.ai/v1/chat/completions"
-        model = (
-            self.configured_model
-            if self.configured_model != "auto"
-            else "grok-2-vision-1212"
+        # Default fallback
+        endpoint = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
+        model = self.configured_model if (self.configured_model and self.configured_model != "auto") else "gemini-2.0-flash"
+        return "Google Gemini (aistudio.google.com)", endpoint, model
+
+    def _get_active_providers(self) -> List[Dict[str, Any]]:
+        """Resolve candidate providers in priority order with their active credentials."""
+        cfg = load_config()
+        all_keys = get_all_provider_keys()
+
+        # If an explicit api_key was passed to AIVisionClient, place it as primary
+        if self.api_key and not self.api_key.startswith("YOUR_") and "PLACEHOLDER" not in self.api_key.upper():
+            k = self.api_key.strip()
+            if k.startswith("AQ.") or k.startswith("AIza"):
+                all_keys["gemini"] = k
+            elif k.startswith("xai-"):
+                all_keys["grok"] = k
+            elif k.startswith("sk-or-"):
+                all_keys["openrouter"] = k
+            elif k.startswith("nvapi-"):
+                all_keys["nvidia_nim"] = k
+            elif k.startswith("gsk_"):
+                all_keys["groq"] = k
+            elif not any(all_keys.values()):
+                all_keys["gemini"] = k
+
+        priority_order = cfg.get(
+            "provider_priority",
+            ["gemini", "grok", "openrouter", "nvidia_nim", "groq"]
         )
-        return "xAI Grok (console.x.ai)", endpoint, model
+
+        providers: List[Dict[str, Any]] = []
+        for prov_id in priority_order:
+            key = (all_keys.get(prov_id) or "").strip()
+            if not key or key.startswith("YOUR_") or "PLACEHOLDER" in key.upper():
+                continue
+
+            if prov_id == "gemini":
+                model = self.configured_model if (self.configured_model and self.configured_model != "auto" and "gemini" in self.configured_model.lower()) else "gemini-2.0-flash"
+                providers.append({
+                    "id": "gemini",
+                    "name": "Google Gemini",
+                    "endpoint": "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+                    "model": model,
+                    "key": key,
+                    "headers": {
+                        "Authorization": f"Bearer {key}",
+                        "Content-Type": "application/json",
+                    }
+                })
+            elif prov_id == "grok":
+                model = self.configured_model if (self.configured_model and self.configured_model != "auto" and "grok" in self.configured_model.lower()) else "grok-2-vision-1212"
+                providers.append({
+                    "id": "grok",
+                    "name": "xAI Grok",
+                    "endpoint": "https://api.x.ai/v1/chat/completions",
+                    "model": model,
+                    "key": key,
+                    "headers": {
+                        "Authorization": f"Bearer {key}",
+                        "Content-Type": "application/json",
+                    }
+                })
+            elif prov_id == "openrouter":
+                model = self.configured_model if (self.configured_model and self.configured_model != "auto" and "/" in self.configured_model) else "google/gemini-2.0-flash-exp:free"
+                providers.append({
+                    "id": "openrouter",
+                    "name": "OpenRouter",
+                    "endpoint": "https://openrouter.ai/api/v1/chat/completions",
+                    "model": model,
+                    "key": key,
+                    "headers": {
+                        "Authorization": f"Bearer {key}",
+                        "Content-Type": "application/json",
+                        "HTTP-Referer": "https://github.com/Charukhesh/spidy",
+                        "X-Title": "Spidy Desktop Companion",
+                    }
+                })
+            elif prov_id == "nvidia_nim":
+                model = self.configured_model if (self.configured_model and self.configured_model != "auto" and "meta/" in self.configured_model) else "meta/llama-3.2-11b-vision-instruct"
+                providers.append({
+                    "id": "nvidia_nim",
+                    "name": "NVIDIA NIM",
+                    "endpoint": "https://integrate.api.nvidia.com/v1/chat/completions",
+                    "model": model,
+                    "key": key,
+                    "headers": {
+                        "Authorization": f"Bearer {key}",
+                        "Content-Type": "application/json",
+                    }
+                })
+            elif prov_id == "groq":
+                model = self.configured_model if (self.configured_model and self.configured_model != "auto" and "qwen" in self.configured_model.lower()) else "qwen/qwen3.8-27b"
+                providers.append({
+                    "id": "groq",
+                    "name": "Groq Cloud",
+                    "endpoint": "https://api.groq.com/openai/v1/chat/completions",
+                    "model": model,
+                    "key": key,
+                    "headers": {
+                        "Authorization": f"Bearer {key}",
+                        "Content-Type": "application/json",
+                    }
+                })
+
+        return providers
 
     def set_api_key(self, key: str):
         self.api_key = key.strip()
@@ -242,15 +349,13 @@ class AIVisionClient:
         active_context: Optional[str] = None,
         audio_bytes: Optional[bytes] = None,
     ) -> AIVisionResponse:
-        """Send user voice audio/transcript, active window context, and screen capture(s) to multimodal vision LLM."""
-        if not self.api_key or self.api_key.startswith("YOUR_") or "PLACEHOLDER" in self.api_key.upper():
+        """Send user voice audio/transcript, active window context, and screen capture(s) to multimodal vision LLM with auto-failover."""
+        active_providers = self._get_active_providers()
+        if not active_providers:
             return AIVisionResponse(
-                full_text="please enter your api key in the spidy settings first [POINT:none]",
-                spoken_text="please enter your api key in the spidy settings first",
+                full_text="please enter your api key in the spidy settings or .env file first [POINT:none]",
+                spoken_text="please enter your api key in the spidy settings or .env file first",
             )
-
-        provider_name, endpoint_url, active_model = self._resolve_provider_and_model()
-        logger.info(f"Using Provider: {provider_name} | Endpoint: {endpoint_url} | Model: {active_model}")
 
         # Build message contents
         user_content: List[Dict[str, Any]] = []
@@ -310,71 +415,89 @@ class AIVisionClient:
 
         messages.append({"role": "user", "content": user_content})
 
-        headers = {
-            "Authorization": f"Bearer {self.api_key.strip()}",
-            "Content-Type": "application/json",
-        }
+        last_error_details = []
 
-        payload = {
-            "model": active_model,
-            "messages": messages,
-            "temperature": 0.5,
-            "max_tokens": 450,
-        }
+        for p_idx, prov in enumerate(active_providers):
+            provider_name = prov["name"]
+            endpoint_url = prov["endpoint"]
+            active_model = prov["model"]
+            headers = prov["headers"]
 
-        try:
-            if not hasattr(self, "_http_client") or self._http_client.is_closed:
-                self._http_client = httpx.Client(timeout=25.0)
-
-            response = self._http_client.post(endpoint_url, headers=headers, json=payload)
-            response.raise_for_status()
-            data = response.json()
-            raw_reply = data["choices"][0]["message"].get("content", "")
-
-            # Parse pointing coordinates, visual drawings, heard prompt, curve tracing, web search, action, remember, and realtime graphics
-            spoken_text, point_target, drawings, heard_prompt, trace_curve, offer_search, action_type, action_arg, remember_item, realtime_graphic = self.parse_visual_tags(raw_reply)
-
-            # Map normalized [0..1000] coordinates to screenshot pixel resolution
-            point_target, drawings = self._scale_to_capture_pixels(point_target, drawings, screen_captures)
-
-            # Save exchange in history
-            saved_prompt = heard_prompt or transcript or "Voice Request"
-            self.conversation_history.append((saved_prompt, spoken_text))
-            if len(self.conversation_history) > self.history_limit:
-                self.conversation_history.pop(0)
-
-            return AIVisionResponse(
-                full_text=raw_reply,
-                spoken_text=spoken_text,
-                point_target=point_target,
-                drawings=drawings,
-                heard_prompt=heard_prompt,
-                trace_curve=trace_curve,
-                offer_search=offer_search,
-                action_type=action_type,
-                action_arg=action_arg,
-                remember_item=remember_item,
-                realtime_graphic=realtime_graphic,
+            logger.info(
+                f"[AI Vision Failover] Trying provider {p_idx+1}/{len(active_providers)}: "
+                f"{provider_name} ({active_model})"
             )
 
-        except httpx.HTTPStatusError as e:
-            err_body = e.response.text
-            logger.error(f"{provider_name} API HTTP error {e.response.status_code}: {err_body}")
+            payload = {
+                "model": active_model,
+                "messages": messages,
+                "temperature": 0.5,
+                "max_tokens": 450,
+            }
 
-            if e.response.status_code == 401:
-                err_msg = f"invalid api key for {provider_name}. please check your key in settings"
-            elif "model_not_found" in err_body or "deactivated" in err_body or "no longer available" in err_body:
-                err_msg = f"model {active_model} is unavailable on {provider_name}. please select another model"
-            elif e.response.status_code == 429:
-                err_msg = "api rate limit exceeded. please wait a moment before trying again"
-            else:
-                err_msg = f"api error {e.response.status_code}. check your network or key"
+            try:
+                if not hasattr(self, "_http_client") or self._http_client.is_closed:
+                    self._http_client = httpx.Client(timeout=22.0)
 
-            return AIVisionResponse(full_text=err_msg, spoken_text=err_msg)
-        except Exception as e:
-            logger.error(f"AI client request error: {e}")
-            err_msg = "sorry, i ran into an issue connecting to the vision service"
-            return AIVisionResponse(full_text=err_msg, spoken_text=err_msg)
+                response = self._http_client.post(endpoint_url, headers=headers, json=payload)
+                response.raise_for_status()
+                data = response.json()
+                raw_reply = data["choices"][0]["message"].get("content", "")
+
+                logger.info(f"[AI Vision Failover] Provider '{provider_name}' responded successfully.")
+
+                # Parse pointing coordinates, visual drawings, heard prompt, curve tracing, web search, action, remember, realtime graphics, and 3D scenes
+                spoken_text, point_target, drawings, heard_prompt, trace_curve, offer_search, action_type, action_arg, remember_item, realtime_graphic, scene_3d = self.parse_visual_tags(raw_reply)
+
+                # Map normalized [0..1000] coordinates to screenshot pixel resolution
+                point_target, drawings = self._scale_to_capture_pixels(point_target, drawings, screen_captures)
+
+                # Save exchange in history
+                saved_prompt = heard_prompt or transcript or "Voice Request"
+                self.conversation_history.append((saved_prompt, spoken_text))
+                if len(self.conversation_history) > self.history_limit:
+                    self.conversation_history.pop(0)
+
+                return AIVisionResponse(
+                    full_text=raw_reply,
+                    spoken_text=spoken_text,
+                    point_target=point_target,
+                    drawings=drawings,
+                    heard_prompt=heard_prompt,
+                    trace_curve=trace_curve,
+                    offer_search=offer_search,
+                    action_type=action_type,
+                    action_arg=action_arg,
+                    remember_item=remember_item,
+                    realtime_graphic=realtime_graphic,
+                    scene_3d=scene_3d,
+                )
+
+            except httpx.HTTPStatusError as e:
+                status = e.response.status_code
+                snippet = e.response.text[:200]
+                logger.warning(
+                    f"[AI Vision Failover] Provider '{provider_name}' failed with HTTP {status}: {snippet}. "
+                    f"Failing over to next available provider..."
+                )
+                last_error_details.append(f"{provider_name} (HTTP {status})")
+                continue
+            except Exception as e:
+                logger.warning(
+                    f"[AI Vision Failover] Provider '{provider_name}' failed with error: {e}. "
+                    f"Failing over to next available provider..."
+                )
+                last_error_details.append(f"{provider_name} ({e})")
+                continue
+
+        # If all active providers were tried and none succeeded
+        all_errs = ", ".join(last_error_details) if last_error_details else "all models busy"
+        err_msg = (
+            "all configured vision models experienced rate limits or errors. "
+            "please check your api keys or try again in a moment"
+        )
+        logger.error(f"[AI Vision] All providers exhausted: {all_errs}")
+        return AIVisionResponse(full_text=err_msg, spoken_text=err_msg)
 
     def _scale_to_capture_pixels(
         self,
@@ -437,8 +560,8 @@ class AIVisionClient:
     @staticmethod
     def parse_visual_tags(
         response_text: str,
-    ) -> Tuple[str, Optional[PointingTarget], List[VisualDrawing], str, Optional[TraceCurveTarget], str, str, str, Optional[Tuple[str, str, str]], Optional[RealtimeGraphicSpec]]:
-        """Parse visual tags, actions, memories, heard prompts, and drawings."""
+    ) -> Tuple[str, Optional[PointingTarget], List[VisualDrawing], str, Optional[TraceCurveTarget], str, str, str, Optional[Tuple[str, str, str]], Optional[RealtimeGraphicSpec], Optional[Scene3DSpec]]:
+        """Parse visual tags, actions, memories, heard prompts, drawings, RTG, and 3D scenes."""
         spoken = response_text
         point_target: Optional[PointingTarget] = None
         drawings: List[VisualDrawing] = []
@@ -641,9 +764,78 @@ class AIVisionClient:
                 )
             spoken = spoken[:tag_start_idx] + spoken[tag_end_idx:]
 
+        # 12. Parse [SCENE_3D:...]
+        scene_3d: Optional[Scene3DSpec] = None
+        match_3d = re.search(r"\[SCENE_3D:\s*", spoken, re.IGNORECASE)
+        if match_3d:
+            tag_start_idx = match_3d.start()
+            content_start_idx = match_3d.end()
+
+            if content_start_idx < len(spoken) and spoken[content_start_idx] == "{":
+                brace_count = 0
+                in_string = False
+                escape_char = False
+                end_brace_idx = -1
+
+                for idx in range(content_start_idx, len(spoken)):
+                    ch = spoken[idx]
+                    if escape_char:
+                        escape_char = False
+                        continue
+                    if ch == "\\":
+                        escape_char = True
+                        continue
+                    if ch == '"':
+                        in_string = not in_string
+                        continue
+                    if not in_string:
+                        if ch == "{":
+                            brace_count += 1
+                        elif ch == "}":
+                            brace_count -= 1
+                            if brace_count == 0:
+                                end_brace_idx = idx
+                                break
+
+                if end_brace_idx != -1:
+                    raw_body = spoken[content_start_idx : end_brace_idx + 1]
+                    closing_bracket_idx = spoken.find("]", end_brace_idx)
+                    tag_end_idx = (closing_bracket_idx + 1) if closing_bracket_idx != -1 else (end_brace_idx + 1)
+                else:
+                    closing_bracket_idx = spoken.find("]", content_start_idx)
+                    tag_end_idx = (closing_bracket_idx + 1) if closing_bracket_idx != -1 else len(spoken)
+                    raw_body = spoken[content_start_idx : tag_end_idx - (1 if closing_bracket_idx != -1 else 0)].strip()
+            else:
+                closing_bracket_idx = spoken.find("]", content_start_idx)
+                tag_end_idx = (closing_bracket_idx + 1) if closing_bracket_idx != -1 else len(spoken)
+                raw_body = spoken[content_start_idx : tag_end_idx - (1 if closing_bracket_idx != -1 else 0)].strip()
+
+            try:
+                parsed_3d = json.loads(raw_body)
+                scene_3d = Scene3DSpec(
+                    title=parsed_3d.get("title", "3D Interactive View"),
+                    entity=parsed_3d.get("entity", "generic"),
+                    subtitle=parsed_3d.get("subtitle", ""),
+                    cutaway=bool(parsed_3d.get("cutaway", False)),
+                    primitives=parsed_3d.get("primitives", []),
+                    callouts=parsed_3d.get("callouts", []),
+                    animation=parsed_3d.get("animation", "spin"),
+                    raw_payload=raw_body,
+                    options=parsed_3d.get("options", {}),
+                )
+            except Exception as e:
+                logger.debug(f"3D Scene JSON parse fallback: {e}")
+                scene_3d = Scene3DSpec(
+                    title="3D Interactive View",
+                    entity=raw_body[:30].strip(),
+                    raw_payload=raw_body,
+                )
+
+            spoken = spoken[:tag_start_idx] + spoken[tag_end_idx:]
+
         # Failsafe cleanup: strip any remaining bracketed tags or negative control [POINT:none]
         spoken = re.sub(
-            r"\[(?:POINT|DRAW|SIMULATE|WRITE|HEARD|TRACE|OFFER_SEARCH|ACTION|REMEMBER|DIAGRAM|CUTAWAY|ASSEMBLY)[^\]]*\]",
+            r"\[(?:POINT|DRAW|SIMULATE|WRITE|HEARD|TRACE|OFFER_SEARCH|ACTION|REMEMBER|DIAGRAM|CUTAWAY|ASSEMBLY|SCENE_3D)[^\]]*\]",
             "",
             spoken,
             flags=re.IGNORECASE,
@@ -651,7 +843,7 @@ class AIVisionClient:
         spoken = re.sub(r"\[POINT:\s*none\s*\]", "", spoken, flags=re.IGNORECASE).strip()
         spoken = re.sub(r"\s+", " ", spoken).strip()
 
-        return spoken.strip(), point_target, drawings, heard_prompt, trace_curve, offer_search, action_type, action_arg, remember_item, realtime_graphic
+        return spoken.strip(), point_target, drawings, heard_prompt, trace_curve, offer_search, action_type, action_arg, remember_item, realtime_graphic, scene_3d
 
 
 # Backward compatibility alias

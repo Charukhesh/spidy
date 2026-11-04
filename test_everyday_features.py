@@ -132,6 +132,7 @@ class TestEverydayPowerFeatures(unittest.TestCase):
         leave_event = QEvent(QEvent.Leave)
         hud.leaveEvent(leave_event)
         self.assertTrue(hud._collapse_timer.isActive())
+        hud.close()
         print("[PASS] Test 4 Passed: Top-Center Glass HUD (2-3 mm Bar, Expansion, Copy, Hover) operates smoothly.")
 
     def test_05_unified_hotkey_config(self):
@@ -286,6 +287,7 @@ class TestEverydayPowerFeatures(unittest.TestCase):
         overlay.clear_curve()
         self.assertEqual(len(overlay.curve_points), 0)
         self.assertEqual(len(overlay.curve_trail_points), 0)
+        overlay.close()
         print("[PASS] Test 11 Passed: Cursor Overlay Dynamic Curve Tracing Loop verified.")
 
 

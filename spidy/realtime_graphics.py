@@ -277,11 +277,12 @@ class RealtimeGraphicsRenderer:
 
         # 3. Flow Nodes (Input -> Target / Sequential mapping)
         if nodes:
-            node_w = min(150.0, (rect.width() - (len(nodes) * 30.0)) / max(1, len(nodes)))
+            nodes_to_show = nodes[:4]
+            node_w = min(150.0, (rect.width() - (len(nodes_to_show) - 1) * 24.0) / max(1, len(nodes_to_show)))
             node_h = 42.0
             start_x = rect.left()
 
-            for i, n in enumerate(nodes):
+            for i, n in enumerate(nodes_to_show):
                 n_label = n.get("label", f"Node {i+1}")
                 n_sub = n.get("sublabel", "")
                 n_box = QRectF(start_x, curr_y, node_w, node_h)
@@ -307,7 +308,7 @@ class RealtimeGraphicsRenderer:
                     painter.drawText(QRectF(n_box.left() + 12, n_box.top() + 22, n_box.width() - 16, 16), Qt.AlignLeft, n_sub)
 
                 # Arrow to next node
-                if i < len(nodes) - 1:
+                if i < len(nodes_to_show) - 1:
                     arrow_x = start_x + node_w + 6
                     arrow_y = curr_y + (node_h / 2.0)
                     painter.setPen(QPen(SPIDY_RED, 2))
@@ -332,7 +333,7 @@ class RealtimeGraphicsRenderer:
             painter.drawText(loop_rect, Qt.AlignCenter, f"Training Cycle: {loop_text}")
 
     def _render_cutaway_schematic(self, painter: QPainter, rect: QRectF, spec: RealtimeGraphicSpec):
-        """Render 2D/3D cutaway schematic: engineering cross-sections, force vectors, component labels."""
+        """Render universal procedural cutaway schematic: engineering cross-sections, force vectors, component labels."""
         data = spec.data
         components = data.get("components") or data.get("layers") or []
         vectors = data.get("vectors") or data.get("force_vectors") or []
@@ -349,52 +350,79 @@ class RealtimeGraphicsRenderer:
 
         # Draw schematic diagram area (wireframe chassis)
         schematic_w = rect.width() * 0.52
-        schematic_h = max(110.0, rect.bottom() - curr_y - 10)
+        schematic_h = max(120.0, rect.bottom() - curr_y - 12)
         schematic_rect = QRectF(rect.left(), curr_y, schematic_w, schematic_h)
 
-        # Wireframe backdrop
+        # 1. Outer Engineering Chassis / Cutaway Hull
         painter.setPen(QPen(QColor(220, 38, 38, 90), 1.2, Qt.DashLine))
-        painter.setBrush(QBrush(QColor(28, 25, 23, 10)))
-        painter.drawRoundedRect(schematic_rect, 8, 8)
+        painter.setBrush(QBrush(QColor(28, 25, 23, 12)))
+        painter.drawRoundedRect(schematic_rect, 10, 10)
 
-        # Draw simulated mechanical cutaways (lift fan cylinder + duct nozzle)
-        fan_rect = QRectF(schematic_rect.left() + 20, schematic_rect.top() + 25, 45, 60)
-        painter.setPen(QPen(SPIDY_RED, 1.8))
-        painter.setBrush(QBrush(QColor(220, 38, 38, 30)))
-        painter.drawRoundedRect(fan_rect, 6, 6)
+        # 2. Universal Dynamic Chamber & Subsystem Synthesis
+        num_comps = max(1, min(4, len(components)))
+        chamber_w = (schematic_w - 24.0) / num_comps
+        palette = [SPIDY_RED, SPIDY_CRIMSON, SPIDY_AMBER, QColor(180, 83, 9)]
 
-        # Turbine duct
-        duct_rect = QRectF(schematic_rect.left() + 85, schematic_rect.top() + 35, 75, 40)
-        painter.setPen(QPen(SPIDY_CRIMSON, 1.8))
-        painter.setBrush(QBrush(QColor(153, 27, 27, 25)))
-        painter.drawRoundedRect(duct_rect, 6, 6)
+        chamber_centers = []
+        for idx in range(num_comps):
+            comp = components[idx] if idx < len(components) else {}
+            c_name = comp.get("name", f"Chamber {idx+1}") if isinstance(comp, dict) else str(comp)
+            c_col = palette[idx % len(palette)]
 
-        # Swivel nozzle
-        nozzle_path = QPainterPath()
-        nozzle_path.moveTo(duct_rect.right(), duct_rect.top() + 5)
-        nozzle_path.lineTo(duct_rect.right() + 30, duct_rect.top() + 15)
-        nozzle_path.lineTo(duct_rect.right() + 25, duct_rect.bottom() + 15)
-        nozzle_path.lineTo(duct_rect.right(), duct_rect.bottom() - 5)
-        nozzle_path.closeSubpath()
-        painter.setPen(QPen(SPIDY_RED, 1.8))
-        painter.setBrush(QBrush(QColor(220, 38, 38, 45)))
-        painter.drawPath(nozzle_path)
+            cx = schematic_rect.left() + 12.0 + idx * chamber_w
+            cy = schematic_rect.top() + 16.0
+            cw = chamber_w - 8.0
+            ch = schematic_h - 42.0
+            ch_rect = QRectF(cx, cy, cw, ch)
+            chamber_centers.append(ch_rect.center())
 
-        # Downward Thrust Force Vectors (Amber glowing arrows)
-        painter.setPen(QPen(SPIDY_AMBER, 2.8, Qt.SolidLine, Qt.RoundCap))
-        # Vector 1 (Lift Fan Downward Thrust)
-        v1_x = fan_rect.center().x()
-        painter.drawLine(QPointF(v1_x, fan_rect.bottom() + 2), QPointF(v1_x, fan_rect.bottom() + 24))
-        painter.drawLine(QPointF(v1_x - 4, fan_rect.bottom() + 18), QPointF(v1_x, fan_rect.bottom() + 24))
-        painter.drawLine(QPointF(v1_x + 4, fan_rect.bottom() + 18), QPointF(v1_x, fan_rect.bottom() + 24))
+            # Chamber volume (translucent tinted glass)
+            painter.setPen(QPen(c_col, 1.5))
+            painter.setBrush(QBrush(QColor(c_col.red(), c_col.green(), c_col.blue(), 25)))
+            painter.drawRoundedRect(ch_rect, 6, 6)
 
-        # Vector 2 (Swivel Nozzle Downward Thrust)
-        v2_x = duct_rect.right() + 15
-        painter.drawLine(QPointF(v2_x, duct_rect.bottom() + 14), QPointF(v2_x, duct_rect.bottom() + 36))
-        painter.drawLine(QPointF(v2_x - 4, duct_rect.bottom() + 30), QPointF(v2_x, duct_rect.bottom() + 36))
-        painter.drawLine(QPointF(v2_x + 4, duct_rect.bottom() + 30), QPointF(v2_x, duct_rect.bottom() + 36))
+            # Engineering diagonal cross-section hatching lines
+            painter.save()
+            painter.setClipRect(ch_rect)
+            hatch_pen = QPen(QColor(c_col.red(), c_col.green(), c_col.blue(), 35), 1, Qt.SolidLine)
+            painter.setPen(hatch_pen)
+            diag_step = 12
+            for diag_x in range(int(ch_rect.left() - ch), int(ch_rect.right() + ch), diag_step):
+                painter.drawLine(QPointF(diag_x, ch_rect.bottom()), QPointF(diag_x + ch, ch_rect.top()))
+            painter.restore()
 
-        # Right side: Component callouts list
+            # Internal mechanism / core indicator
+            core_rect = QRectF(ch_rect.center().x() - 10, ch_rect.center().y() - 14, 20, 28)
+            painter.setPen(QPen(c_col, 1.2))
+            painter.setBrush(QBrush(QColor(c_col.red(), c_col.green(), c_col.blue(), 70)))
+            painter.drawRoundedRect(core_rect, 3, 3)
+
+            # Flow connection port to next chamber
+            if idx < num_comps - 1:
+                port_x = ch_rect.right()
+                port_y = ch_rect.center().y()
+                painter.setPen(QPen(SPIDY_AMBER, 2, Qt.SolidLine))
+                painter.drawLine(QPointF(port_x, port_y), QPointF(port_x + 8.0, port_y))
+
+        # 3. Universal Dynamic Force & Vector Arrows
+        if vectors:
+            for v_idx, vec in enumerate(vectors[:3]):
+                v_col = SPIDY_AMBER
+                v_x = schematic_rect.left() + 24.0 + (v_idx * chamber_w * 1.2)
+                v_y = schematic_rect.bottom() - 18.0
+                painter.setPen(QPen(v_col, 2.6, Qt.SolidLine, Qt.RoundCap))
+                painter.drawLine(QPointF(v_x, v_y - 18), QPointF(v_x, v_y + 8))
+                painter.drawLine(QPointF(v_x - 4, v_y + 2), QPointF(v_x, v_y + 8))
+                painter.drawLine(QPointF(v_x + 4, v_y + 2), QPointF(v_x, v_y + 8))
+        else:
+            # Default directional flow vectors under the chambers
+            for cc in chamber_centers[:2]:
+                painter.setPen(QPen(SPIDY_AMBER, 2.6, Qt.SolidLine, Qt.RoundCap))
+                painter.drawLine(QPointF(cc.x(), schematic_rect.bottom() - 20), QPointF(cc.x(), schematic_rect.bottom() + 4))
+                painter.drawLine(QPointF(cc.x() - 4, schematic_rect.bottom() - 2), QPointF(cc.x(), schematic_rect.bottom() + 4))
+                painter.drawLine(QPointF(cc.x() + 4, schematic_rect.bottom() - 2), QPointF(cc.x(), schematic_rect.bottom() + 4))
+
+        # 4. Right side: Dynamic Component Callouts & Subsystems List
         callout_x = schematic_rect.right() + 16
         callout_w = rect.right() - callout_x
         callout_y = curr_y
@@ -404,27 +432,27 @@ class RealtimeGraphicsRenderer:
         painter.drawText(QRectF(callout_x, callout_y, callout_w, 18), Qt.AlignLeft, "Key Subsystems:")
         callout_y += 22.0
 
-        for comp in components[:4]:
+        for idx, comp in enumerate(components[:4]):
             if isinstance(comp, dict):
-                c_name = comp.get("name", "Component")
+                c_name = comp.get("name", f"Subsystem {idx+1}")
                 c_desc = comp.get("desc") or comp.get("annotation") or ""
             else:
                 c_name = str(comp)
                 c_desc = ""
 
-            bullet_rect = QRectF(callout_x, callout_y + 3, 6, 6)
+            bullet_rect = QRectF(callout_x, callout_y + 3, 7, 7)
             painter.setPen(Qt.NoPen)
-            painter.setBrush(SPIDY_RED)
+            painter.setBrush(palette[idx % len(palette)])
             painter.drawEllipse(bullet_rect)
 
             painter.setFont(self.font_small_bold)
             painter.setPen(SPIDY_TEXT_DARK)
-            painter.drawText(QRectF(callout_x + 12, callout_y, callout_w - 12, 16), Qt.AlignLeft, c_name)
+            painter.drawText(QRectF(callout_x + 14, callout_y, callout_w - 14, 16), Qt.AlignLeft, c_name)
 
             if c_desc:
                 painter.setFont(self.font_small)
                 painter.setPen(SPIDY_TEXT_MUTED)
-                painter.drawText(QRectF(callout_x + 12, callout_y + 14, callout_w - 12, 14), Qt.AlignLeft, c_desc)
+                painter.drawText(QRectF(callout_x + 14, callout_y + 14, callout_w - 14, 14), Qt.AlignLeft, c_desc)
                 callout_y += 32.0
             else:
                 callout_y += 20.0

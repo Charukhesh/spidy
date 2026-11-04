@@ -16,10 +16,11 @@ from pathlib import Path
 # Add project root to sys.path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+from PyQt5.QtCore import Qt, QPoint, QRect
 from PyQt5.QtWidgets import QApplication
 from PyQt5.QtGui import QPixmap, QPainter, QFont
-from PyQt5.QtCore import QPoint, QRect
 
+QApplication.setAttribute(Qt.AA_ShareOpenGLContexts, True)
 app = QApplication.instance() or QApplication(sys.argv)
 
 from spidy.realtime_graphics import RealtimeGraphicSpec, RealtimeGraphicsRenderer
@@ -41,7 +42,7 @@ class TestRealtimeGraphics(unittest.TestCase):
         )
         (
             spoken, target, drawings, heard, trace, search,
-            act_t, act_a, rem, spec
+            act_t, act_a, rem, spec, scene_3d
         ) = AIVisionClient.parse_visual_tags(raw_text)
 
         self.assertIsNotNone(spec)
@@ -65,7 +66,7 @@ class TestRealtimeGraphics(unittest.TestCase):
         )
         (
             spoken, target, drawings, heard, trace, search,
-            act_t, act_a, rem, spec
+            act_t, act_a, rem, spec, scene_3d
         ) = AIVisionClient.parse_visual_tags(raw_text)
 
         self.assertIsNotNone(spec)
@@ -87,7 +88,7 @@ class TestRealtimeGraphics(unittest.TestCase):
         )
         (
             spoken, target, drawings, heard, trace, search,
-            act_t, act_a, rem, spec
+            act_t, act_a, rem, spec, scene_3d
         ) = AIVisionClient.parse_visual_tags(raw_text)
 
         self.assertIsNotNone(spec)

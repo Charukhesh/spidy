@@ -216,6 +216,8 @@ class DesktopActionController:
             app = QApplication.instance()
             if app:
                 clip = app.clipboard()
+                clip.clear()
+                app.processEvents()
                 clip.setText(text)
                 app.processEvents()
                 written = True
@@ -242,6 +244,13 @@ class DesktopActionController:
                 logger.debug(f"ctypes clipboard write notice: {e}")
             time.sleep(0.01)
 
+        try:
+            app = QApplication.instance()
+            if app:
+                app.processEvents()
+        except Exception:
+            pass
+
         return written
 
     @classmethod
@@ -262,5 +271,6 @@ class DesktopActionController:
             return False, f"Unsupported action type: '{action_type}'"
 
 
-# Singleton instance
+# Singleton instance and class alias
 desktop_actions = DesktopActionController()
+DesktopActions = DesktopActionController

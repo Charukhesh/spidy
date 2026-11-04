@@ -158,7 +158,10 @@ class ContextInspector:
             if app:
                 clip = app.clipboard()
                 if clip:
+                    clip.clear()
+                    app.processEvents()
                     clip.setText(text)
+                    app.processEvents()
                     return True
         except Exception:
             pass

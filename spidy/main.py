@@ -31,6 +31,7 @@ def main():
     # Enable High DPI scaling
     QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
     QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
+    QApplication.setAttribute(Qt.AA_ShareOpenGLContexts, True)
 
     app = QApplication(sys.argv)
     app.setApplicationName("Spidy")

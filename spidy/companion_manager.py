@@ -35,6 +35,8 @@ from spidy.sound_effects import sounds
 from spidy.context_inspector import inspector
 from spidy.top_bar_hud import TopBarGlassHUD
 from spidy.beige_card_hud import BeigeCardHUD
+from spidy.viewport_3d import Spidy3DViewport
+from spidy.scene_3d_spec import Scene3DSpec
 from spidy.curve_generator import CurveGenerator
 from spidy.web_search import web_search
 from spidy.desktop_actions import desktop_actions
@@ -69,6 +71,10 @@ class CompanionManager(QObject):
     sig_show_graphic = pyqtSignal(object)
     sig_clear_graphic = pyqtSignal()
 
+    # Spidy 3D Viewport Signals
+    sig_show_3d = pyqtSignal(object)
+    sig_clear_3d = pyqtSignal()
+
     # Spidy Beige Tab Signals
     sig_toggle_beige_card = pyqtSignal()
     sig_show_beige_card = pyqtSignal(str, str)
@@ -96,6 +102,9 @@ class CompanionManager(QObject):
         # Spidy Warm Beige Rounded Tab HUD (Spawns near cursor)
         self.beige_card = BeigeCardHUD()
 
+        # Spidy Interactive 3D PBR WebGL Viewport (Spawns near cursor)
+        self.viewport_3d = Spidy3DViewport()
+
         # Legacy Top Bar HUD permanently dropped
         self.top_bar_hud = None
         self.history_hud = None
@@ -108,6 +117,8 @@ class CompanionManager(QObject):
         self.sig_clear_drawings.connect(self.overlay.clear_drawings)
         self.sig_show_graphic.connect(self.overlay.show_realtime_graphic)
         self.sig_clear_graphic.connect(self.overlay.clear_realtime_graphic)
+        self.sig_show_3d.connect(self.viewport_3d.show_scene)
+        self.sig_clear_3d.connect(self.viewport_3d.clear_scene)
 
         # Pipeline state flags
         self.is_hotkey_down = False
@@ -177,11 +188,12 @@ class CompanionManager(QObject):
                 elif not is_tilde_raw and was_tilde_pressed:
                     was_tilde_pressed = False
 
-                # Evaluate 'Esc' (VK_ESCAPE = 0x1B) to dismiss Realtime Graphics & Beige Card
+                # Evaluate 'Esc' (VK_ESCAPE = 0x1B) to dismiss Realtime Graphics, 3D Viewport & Beige Card
                 is_escape_raw = bool(user32.GetAsyncKeyState(VK_ESCAPE) & 0x8000)
                 if is_escape_raw and not was_escape_pressed:
                     was_escape_pressed = True
                     self.sig_clear_graphic.emit()
+                    self.sig_clear_3d.emit()
                     self.sig_hide_beige_card.emit()
                 elif not is_escape_raw and was_escape_pressed:
                     was_escape_pressed = False
@@ -203,6 +215,7 @@ class CompanionManager(QObject):
         self.overlay.clear_curve()
         self.sig_clear_drawings.emit()
         self.sig_clear_graphic.emit()
+        self.sig_clear_3d.emit()
         self.sig_set_listening.emit()
         sounds.play_activate()
         self.audio_recorder.start()
@@ -235,8 +248,8 @@ class CompanionManager(QObject):
         """Strip all technical tags and brackets to guarantee zero tags are ever spoken aloud."""
         if not text:
             return ""
-        # Remove [DIAGRAM:...], [CUTAWAY:...], [ASSEMBLY:...]
-        cleaned = re.sub(r"\[(?:DIAGRAM|CUTAWAY|ASSEMBLY):\s*(?:\{.+?\}|[^\]]+)\]", "", text, flags=re.IGNORECASE | re.DOTALL)
+        # Remove [DIAGRAM:...], [CUTAWAY:...], [ASSEMBLY:...], [SCENE_3D:...]
+        cleaned = re.sub(r"\[(?:DIAGRAM|CUTAWAY|ASSEMBLY|SCENE_3D):\s*(?:\{.+?\}|[^\]]+)\]", "", text, flags=re.IGNORECASE | re.DOTALL)
         # Remove [POINT:...], [DRAW:...], [SIMULATE:...], [WRITE:...], [HEARD:...], [TRACE:...], [OFFER_SEARCH:...], [ACTION:...], [REMEMBER:...], etc.
         cleaned = re.sub(r"\[(?:POINT|DRAW|SIMULATE|WRITE|HEARD|TRACE|OFFER_SEARCH|ACTION|REMEMBER)[^\]]*\]", "", cleaned, flags=re.IGNORECASE)
         # Strip any other bracketed expressions like [POINT:none] or stray brackets
@@ -386,17 +399,18 @@ class CompanionManager(QObject):
                 self.beige_card.last_response = sanitized_speech
                 self.beige_card.last_query = display_query
 
-                # Intelligent Auto-Display Decision:
-                # If the reply contains code blocks (```), markdown tables (|), URLs, or OCR data,
-                # automatically render the beige tab with 1-click copy!
+                is_visual_active = bool(ai_response.realtime_graphic or ai_response.scene_3d)
+
+                # Strict separation: Beige Tab is ONLY for structured textual/code responses.
+                # When a visual diagram or 3D model is active, the Beige Tab is NOT auto-displayed,
+                # ensuring the visual has zero obstruction near the cursor!
                 is_structured = (
                     "```" in ai_response.full_text
                     or "\n|" in ai_response.full_text
                     or "http" in ai_response.full_text
                     or (ai_response.action_type == "ocr")
-                    or len(sanitized_speech) > 240
                 )
-                if is_structured and self.config.get("beige_tab_enabled", True):
+                if (not is_visual_active) and is_structured and self.config.get("beige_tab_enabled", True):
                     self.sig_show_beige_card.emit(sanitized_speech, display_query)
 
                 # 2.5 Animated Curve Tracing around User Mouse Cursor
@@ -435,6 +449,11 @@ class CompanionManager(QObject):
                 if ai_response.realtime_graphic:
                     logger.info(f"Displaying Real-Time Graphic: {ai_response.realtime_graphic.kind} - '{ai_response.realtime_graphic.title}'")
                     self.sig_show_graphic.emit(ai_response.realtime_graphic)
+
+                # 3.2 Interactive 3D PBR WebGL Scene
+                if ai_response.scene_3d:
+                    logger.info(f"Displaying 3D Interactive Viewport: {ai_response.scene_3d.entity} - '{ai_response.scene_3d.title}'")
+                    self.sig_show_3d.emit(ai_response.scene_3d)
 
                 # 4. Map element pointing coordinates to global screen points & fly to element
                 if ai_response.point_target and screen_captures:

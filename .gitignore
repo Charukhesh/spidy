@@ -15,6 +15,7 @@ do.md
 # Application Data & Secrets
 .env
 .env.*
+!.env.example
 *.key
 *.pem
 credentials.json
