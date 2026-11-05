@@ -114,52 +114,7 @@ def get_all_provider_keys() -> Dict[str, str]:
         "groq": "",
     }
 
-    # 1. Pull from config
-    if cfg.get("gemini_api_key"):
-        keys["gemini"] = str(cfg["gemini_api_key"]).strip()
-    elif cfg.get("api_key") and not str(cfg["api_key"]).startswith("YOUR_"):
-        k = str(cfg["api_key"]).strip()
-        if k.startswith("AQ.") or k.startswith("AIza"):
-            keys["gemini"] = k
-        elif k.startswith("xai-"):
-            keys["grok"] = k
-        elif k.startswith("sk-or-"):
-            keys["openrouter"] = k
-        elif k.startswith("nvapi-"):
-            keys["nvidia_nim"] = k
-        elif k.startswith("gsk_"):
-            keys["groq"] = k
-        else:
-            keys["gemini"] = k
-
-    if cfg.get("grok_api_key"):
-        keys["grok"] = str(cfg["grok_api_key"]).strip()
-    if cfg.get("openrouter_api_key"):
-        keys["openrouter"] = str(cfg["openrouter_api_key"]).strip()
-    if cfg.get("nvidia_nim_api_key"):
-        keys["nvidia_nim"] = str(cfg["nvidia_nim_api_key"]).strip()
-    elif cfg.get("nvidia_api_key"):
-        keys["nvidia_nim"] = str(cfg["nvidia_api_key"]).strip()
-    if cfg.get("groq_api_key"):
-        keys["groq"] = str(cfg["groq_api_key"]).strip()
-
-    # 2. Pull from Environment Variables
-    env_mappings = {
-        "gemini": ["GEMINI_API_KEY", "GOOGLE_API_KEY"],
-        "grok": ["XAI_API_KEY", "GROK_API_KEY"],
-        "openrouter": ["OPENROUTER_API_KEY"],
-        "nvidia_nim": ["NVIDIA_API_KEY", "NVIDIA_NIM_API_KEY"],
-        "groq": ["GROQ_API_KEY"],
-    }
-    for prov, env_vars in env_mappings.items():
-        if not keys[prov] or keys[prov].startswith("YOUR_"):
-            for ev in env_vars:
-                val = os.environ.get(ev, "").strip()
-                if val and not val.startswith("YOUR_"):
-                    keys[prov] = val
-                    break
-
-    # 3. Pull from .env file
+    # 1. Pull from .env file FIRST (highest priority for project workspace)
     for env_path in [Path.cwd() / ".env", Path(__file__).resolve().parent.parent / ".env"]:
         if env_path.exists():
             try:
@@ -183,6 +138,48 @@ def get_all_provider_keys() -> Dict[str, str]:
                                     keys["groq"] = v
             except Exception:
                 pass
+
+    # 2. Pull from Environment Variables
+    env_mappings = {
+        "gemini": ["GEMINI_API_KEY", "GOOGLE_API_KEY"],
+        "grok": ["XAI_API_KEY", "GROK_API_KEY"],
+        "openrouter": ["OPENROUTER_API_KEY"],
+        "nvidia_nim": ["NVIDIA_API_KEY", "NVIDIA_NIM_API_KEY"],
+        "groq": ["GROQ_API_KEY"],
+    }
+    for prov, env_vars in env_mappings.items():
+        if not keys[prov] or keys[prov].startswith("YOUR_"):
+            for ev in env_vars:
+                val = os.environ.get(ev, "").strip()
+                if val and not val.startswith("YOUR_"):
+                    keys[prov] = val
+                    break
+
+    # 3. Pull from config (only if not set by .env or environment)
+    if not keys["gemini"]:
+        if cfg.get("gemini_api_key"):
+            keys["gemini"] = str(cfg["gemini_api_key"]).strip()
+        elif cfg.get("api_key") and not str(cfg["api_key"]).startswith("YOUR_"):
+            k = str(cfg["api_key"]).strip()
+            if k.startswith("AQ.") or k.startswith("AIza"):
+                keys["gemini"] = k
+
+    if not keys["grok"] and cfg.get("grok_api_key"):
+        gk = str(cfg["grok_api_key"]).strip()
+        if gk.startswith("xai-") or gk.startswith("grok_"):
+            keys["grok"] = gk
+
+    if not keys["openrouter"] and cfg.get("openrouter_api_key"):
+        keys["openrouter"] = str(cfg["openrouter_api_key"]).strip()
+
+    if not keys["nvidia_nim"]:
+        if cfg.get("nvidia_nim_api_key"):
+            keys["nvidia_nim"] = str(cfg["nvidia_nim_api_key"]).strip()
+        elif cfg.get("nvidia_api_key"):
+            keys["nvidia_nim"] = str(cfg["nvidia_api_key"]).strip()
+
+    if not keys["groq"] and cfg.get("groq_api_key"):
+        keys["groq"] = str(cfg["groq_api_key"]).strip()
 
     # Clean out placeholders
     for p in keys:

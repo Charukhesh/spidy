@@ -176,7 +176,7 @@ class AIVisionClient:
         # 1. Google Gemini (aistudio.google.com) -> starts with 'AQ.' or 'AIza'
         if key.startswith("AQ.") or key.startswith("AIza") or "gemini" in self.configured_model.lower():
             endpoint = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
-            model = self.configured_model if (self.configured_model and self.configured_model != "auto") else "gemini-2.0-flash"
+            model = self.configured_model if (self.configured_model and self.configured_model != "auto") else "gemini-3-flash-preview"
             return "Google Gemini (aistudio.google.com)", endpoint, model
 
         # 2. xAI Grok (console.x.ai) -> starts with 'xai-'
@@ -205,7 +205,7 @@ class AIVisionClient:
 
         # Default fallback
         endpoint = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
-        model = self.configured_model if (self.configured_model and self.configured_model != "auto") else "gemini-2.0-flash"
+        model = self.configured_model if (self.configured_model and self.configured_model != "auto") else "gemini-3-flash-preview"
         return "Google Gemini (aistudio.google.com)", endpoint, model
 
     def _get_active_providers(self) -> List[Dict[str, Any]]:
@@ -241,7 +241,7 @@ class AIVisionClient:
                 continue
 
             if prov_id == "gemini":
-                model = self.configured_model if (self.configured_model and self.configured_model != "auto" and "gemini" in self.configured_model.lower()) else "gemini-2.0-flash"
+                model = self.configured_model if (self.configured_model and self.configured_model != "auto" and "gemini" in self.configured_model.lower()) else "gemini-3-flash-preview"
                 providers.append({
                     "id": "gemini",
                     "name": "Google Gemini",
@@ -267,7 +267,7 @@ class AIVisionClient:
                     }
                 })
             elif prov_id == "openrouter":
-                model = self.configured_model if (self.configured_model and self.configured_model != "auto" and "/" in self.configured_model) else "google/gemini-2.0-flash-exp:free"
+                model = self.configured_model if (self.configured_model and self.configured_model != "auto" and "/" in self.configured_model) else "google/gemini-2.5-flash"
                 providers.append({
                     "id": "openrouter",
                     "name": "OpenRouter",
@@ -442,7 +442,8 @@ class AIVisionClient:
                 response = self._http_client.post(endpoint_url, headers=headers, json=payload)
                 response.raise_for_status()
                 data = response.json()
-                raw_reply = data["choices"][0]["message"].get("content", "")
+                msg_obj = data["choices"][0].get("message", {})
+                raw_reply = msg_obj.get("content") or ""
 
                 logger.info(f"[AI Vision Failover] Provider '{provider_name}' responded successfully.")
 
