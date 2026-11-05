@@ -422,17 +422,32 @@ class AIVisionClient:
             endpoint_url = prov["endpoint"]
             active_model = prov["model"]
             headers = prov["headers"]
+            prov_id = prov.get("id", "")
 
             logger.info(
                 f"[AI Vision Failover] Trying provider {p_idx+1}/{len(active_providers)}: "
                 f"{provider_name} ({active_model})"
             )
 
+            # Non-Gemini providers (OpenRouter, Groq, Grok) do not accept audio bytes; use textual transcript
+            prov_messages = messages
+            if prov_id != "gemini" and audio_bytes:
+                filtered_user_content = []
+                for item in user_content:
+                    if item.get("type") == "input_audio":
+                        continue
+                    if item.get("type") == "text" and "Listen directly to the user" in item.get("text", ""):
+                        if transcript and transcript.strip():
+                            filtered_user_content.append({"type": "text", "text": transcript.strip()})
+                        continue
+                    filtered_user_content.append(item)
+                prov_messages = messages[:-1] + [{"role": "user", "content": filtered_user_content}]
+
             payload = {
                 "model": active_model,
-                "messages": messages,
+                "messages": prov_messages,
                 "temperature": 0.5,
-                "max_tokens": 450,
+                "max_tokens": 2048,
             }
 
             try:
@@ -574,7 +589,7 @@ class AIVisionClient:
         remember_item = None
 
         # 0. Parse [HEARD: <exact words>]
-        heard_pattern = re.compile(r"\[HEARD:\s*([^\]]+)\]", re.IGNORECASE)
+        heard_pattern = re.compile(r"\[HEARD:\s*([^\]\r\n]+)(?:\]|\r?\n|$)", re.IGNORECASE)
         match_heard = heard_pattern.search(spoken)
         if match_heard:
             heard_prompt = match_heard.group(1).strip()

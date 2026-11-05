@@ -250,10 +250,16 @@ class CompanionManager(QObject):
             return ""
         # Remove [DIAGRAM:...], [CUTAWAY:...], [ASSEMBLY:...], [SCENE_3D:...]
         cleaned = re.sub(r"\[(?:DIAGRAM|CUTAWAY|ASSEMBLY|SCENE_3D):\s*(?:\{.+?\}|[^\]]+)\]", "", text, flags=re.IGNORECASE | re.DOTALL)
-        # Remove [POINT:...], [DRAW:...], [SIMULATE:...], [WRITE:...], [HEARD:...], [TRACE:...], [OFFER_SEARCH:...], [ACTION:...], [REMEMBER:...], etc.
-        cleaned = re.sub(r"\[(?:POINT|DRAW|SIMULATE|WRITE|HEARD|TRACE|OFFER_SEARCH|ACTION|REMEMBER)[^\]]*\]", "", cleaned, flags=re.IGNORECASE)
+        # Strip unclosed or closed [HEARD: ...] tags
+        cleaned = re.sub(r"\[HEARD:[^\]\r\n]*(?:\]|\r?\n|$)", "", cleaned, flags=re.IGNORECASE)
+        # Strip lines starting with "Heard: ..." or "Heard, ..."
+        cleaned = re.sub(r"^\s*\[?Heard[:,\s]+[^\r\n]*\r?\n?", "", cleaned, flags=re.IGNORECASE)
+        # Remove [POINT:...], [DRAW:...], [SIMULATE:...], [WRITE:...], [TRACE:...], [OFFER_SEARCH:...], [ACTION:...], [REMEMBER:...], etc.
+        cleaned = re.sub(r"\[(?:POINT|DRAW|SIMULATE|WRITE|TRACE|OFFER_SEARCH|ACTION|REMEMBER)[^\]\r\n]*(?:\]|\r?\n|$)", "", cleaned, flags=re.IGNORECASE)
         # Strip any other bracketed expressions like [POINT:none] or stray brackets
         cleaned = re.sub(r"\[[^\]]*\]", "", cleaned)
+        # Strip lone opening brackets like [POINT: or [HEARD:
+        cleaned = re.sub(r"\[[A-Z_]+:[^\r\n]*", "", cleaned)
         # Clean up any leftover whitespace
         cleaned = re.sub(r"\s+", " ", cleaned).strip()
         return cleaned
@@ -280,9 +286,8 @@ class CompanionManager(QObject):
                         return None
 
                     fut_ctx = executor.submit(_get_context)
-                    fut_stt = None
-                    if not use_direct_audio:
-                        fut_stt = executor.submit(self.stt_engine.transcribe_pcm, pcm_data)
+                    # Always transcribe in background so failover providers (OpenRouter, Groq, Grok) have textual prompt
+                    fut_stt = executor.submit(self.stt_engine.transcribe_pcm, pcm_data)
 
                     screen_captures = fut_screens.result()
                     active_context_str = fut_ctx.result()
