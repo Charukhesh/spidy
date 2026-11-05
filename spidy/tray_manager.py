@@ -74,7 +74,7 @@ class TrayManager:
 
         self.menu.addSeparator()
 
-        demo_action = QAction("✨ Test Pointing Demo", self.menu)
+        demo_action = QAction("Test Screen Pointer", self.menu)
         if self.on_test_demo:
             demo_action.triggered.connect(self.on_test_demo)
         self.menu.addAction(demo_action)

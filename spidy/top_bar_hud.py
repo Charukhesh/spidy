@@ -36,6 +36,7 @@ from PyQt5.QtWidgets import (
     QGraphicsOpacityEffect,
 )
 from PyQt5.QtGui import QFont, QColor, QCursor, QPainter, QBrush, QPen
+from spidy.sound_effects import sounds
 
 logger = logging.getLogger("spidy.top_bar_hud")
 
@@ -60,8 +61,8 @@ class TopBarGlassHUD(QWidget):
     COLOR_BORDER = "rgba(55, 59, 57, 0.70)"   # DS.Colors.borderSubtle #373B39
     COLOR_TEXT_PRIMARY = "#ECEEED"             # DS.Colors.textPrimary
     COLOR_TEXT_SECONDARY = "#ADB5B2"           # DS.Colors.textSecondary
-    COLOR_ACCENT = "#2563eb"                  # DS.Colors.blue600
-    COLOR_ACCENT_GLOW = "#60a5fa"             # DS.Colors.blue400
+    COLOR_ACCENT = "#DC2626"                  # DS.Colors.blue600
+    COLOR_ACCENT_GLOW = "#EF4444"             # DS.Colors.blue400
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -128,7 +129,7 @@ class TopBarGlassHUD(QWidget):
         status_layout.setContentsMargins(4, 2, 4, 2)
         status_layout.setSpacing(6)
 
-        self.status_icon = QLabel("●", self.status_row)
+        self.status_icon = QLabel("•", self.status_row)
         self.status_icon.setStyleSheet(f"color: {self.COLOR_ACCENT_GLOW}; font-size: 11px;")
         self.status_text = QLabel("Listening...", self.status_row)
         self.status_text.setStyleSheet(f"color: {self.COLOR_TEXT_PRIMARY}; font-size: 12px; font-weight: 600;")
@@ -150,7 +151,7 @@ class TopBarGlassHUD(QWidget):
         header_row = QHBoxLayout()
         header_row.setContentsMargins(0, 0, 0, 0)
 
-        self.brand_label = QLabel("✦ Spidy", self.content_widget)
+        self.brand_label = QLabel("SPIDY", self.content_widget)
         self.brand_label.setStyleSheet(f"""
             color: {self.COLOR_ACCENT_GLOW};
             font-size: 12px;
@@ -240,7 +241,7 @@ class TopBarGlassHUD(QWidget):
         action_row = QHBoxLayout()
         action_row.setContentsMargins(0, 4, 0, 0)
 
-        self.btn_copy = QPushButton("Copy Answer", self.content_widget)
+        self.btn_copy = QPushButton("COPY", self.content_widget)
         self.btn_copy.setCursor(QCursor(Qt.PointingHandCursor))
         self.btn_copy.setStyleSheet(f"""
             QPushButton {{
@@ -324,13 +325,14 @@ class TopBarGlassHUD(QWidget):
         self.content_widget.setVisible(False)
         self.status_row.setVisible(True)
 
-        self.status_icon.setText("●")
+        self.status_icon.setText("•")
         self.status_icon.setStyleSheet(f"color: {self.COLOR_ACCENT_GLOW}; font-size: 11px;")
         self.status_text.setText("Listening...")
 
         target_rect = self._get_top_center_rect(180, 28)
         self._animate_to_rect(target_rect)
         self.show()
+        sounds.play_whoosh()
 
     def set_thinking(self):
         """Transition HUD into Thinking pill mode."""
@@ -344,13 +346,14 @@ class TopBarGlassHUD(QWidget):
         self.content_widget.setVisible(False)
         self.status_row.setVisible(True)
 
-        self.status_icon.setText("✦")
+        self.status_icon.setText("•")
         self.status_icon.setStyleSheet(f"color: #93c5fd; font-size: 11px;")
         self.status_text.setText("Thinking...")
 
         target_rect = self._get_top_center_rect(180, 28)
         self._animate_to_rect(target_rect)
         self.show()
+        sounds.play_whoosh()
 
     def show_response(self, response_text: str, query_text: str = ""):
         """Expand downward to display textual prompt and answer."""
@@ -372,7 +375,7 @@ class TopBarGlassHUD(QWidget):
 
         self.response_label.setText(self.last_response)
         self.state_chip.setText("Answered")
-        self.btn_copy.setText("Copy Answer")
+        self.btn_copy.setText("COPY")
         self._apply_frame_style(TopBarState.EXPANDED)
 
         # Compute dynamic card height
@@ -385,6 +388,7 @@ class TopBarGlassHUD(QWidget):
         target_rect = self._get_top_center_rect(420, estimated_height)
         self._animate_to_rect(target_rect)
         self.show()
+        sounds.play_whoosh()
 
         # Start auto-collapse countdown
         self._collapse_timer.start(self._auto_collapse_delay_ms)
@@ -430,9 +434,10 @@ class TopBarGlassHUD(QWidget):
         if self.last_response:
             clipboard = QApplication.clipboard()
             clipboard.setText(self.last_response)
-            self.btn_copy.setText("✓ Copied!")
+            self.btn_copy.setText("COPIED")
+            sounds.play_ding()
             self.copied_signal.emit()
-            QTimer.singleShot(1800, lambda: self.btn_copy.setText("Copy Answer"))
+            QTimer.singleShot(1800, lambda: self.btn_copy.setText("COPY"))
 
     def enterEvent(self, event):
         """Mouse hover: pause auto-collapse or show slight expansion on bar."""

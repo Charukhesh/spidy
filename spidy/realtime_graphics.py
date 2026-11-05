@@ -186,11 +186,11 @@ class RealtimeGraphicsRenderer:
 
         # Header Badge
         badge_kind_map = {
-            "diagram": "📐 Spidy Visual Tutor",
-            "cutaway": "⚙️ Spidy Cutaway Schematic",
-            "assembly": "🔌 Spidy Assembly Guide",
+            "diagram": "SPIDY // VISUAL TUTOR",
+            "cutaway": "SPIDY // CUTAWAY SCHEMATIC",
+            "assembly": "SPIDY // ASSEMBLY GUIDE",
         }
-        badge_text = badge_kind_map.get(kind, "🕷️ Spidy Graphics")
+        badge_text = badge_kind_map.get(kind, "SPIDY // GRAPHICS")
 
         painter.setFont(self.font_badge)
         metrics = painter.fontMetrics()

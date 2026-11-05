@@ -61,7 +61,7 @@ def main():
     manager.status_updated.connect(tray.update_status)
 
     logging.info("=" * 60)
-    logging.info("🕷️ Spidy Everyday Desktop Companion is active!")
+    logging.info("Spidy Desktop Companion is active!")
     logging.info("Hold 'Ctrl + Alt' to speak to Spidy and analyze your screen.")
     logging.info("Press '~' (tilde) to toggle the warm beige card and copy text responses.")
     logging.info("=" * 60)

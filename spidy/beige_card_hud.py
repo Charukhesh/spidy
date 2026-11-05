@@ -108,7 +108,7 @@ class BeigeCardHUD(QWidget):
         header_layout.setSpacing(8)
 
         # Spidy Mini Emblem / Pill
-        self.badge_label = QLabel("🕷️ Spidy")
+        self.badge_label = QLabel("SPIDY")
         self.badge_label.setFont(QFont("Calibri", 10, QFont.Bold))
         self.badge_label.setStyleSheet(f"""
             color: {self.COLOR_ACCENT_RED};
@@ -127,7 +127,7 @@ class BeigeCardHUD(QWidget):
         header_layout.addWidget(self.query_label, stretch=1)
 
         # 1-Click Copy Button
-        self.copy_btn = QPushButton("📋 Copy")
+        self.copy_btn = QPushButton("COPY")
         self.copy_btn.setFont(QFont("Calibri", 10, QFont.Bold))
         self.copy_btn.setCursor(Qt.PointingHandCursor)
         self.copy_btn.setStyleSheet(f"""
@@ -246,7 +246,7 @@ class BeigeCardHUD(QWidget):
         self._position_near_cursor(width=500, height=target_h)
 
         # Reset copy button text
-        self.copy_btn.setText("📋 Copy")
+        self.copy_btn.setText("COPY")
         self.copy_btn.setStyleSheet(f"""
             QPushButton {{
                 color: {self.COLOR_TEXT_PRIMARY};
@@ -302,7 +302,7 @@ class BeigeCardHUD(QWidget):
             QTimer.singleShot(2200, self._reset_copy_btn)
 
     def _reset_copy_btn(self):
-        self.copy_btn.setText("📋 Copy")
+        self.copy_btn.setText("COPY")
         self.copy_btn.setStyleSheet(f"""
             QPushButton {{
                 color: {self.COLOR_TEXT_PRIMARY};

@@ -5,8 +5,13 @@ Provides pleasant, zero-latency modern chimes for interaction states:
 - Thinking (subtle gentle harmonic pulse)
 - Target Arrival (bright crystal chime when pointer arrives)
 - Dictation Start / Stop (soft tactile pop)
+- 3D Model Build (tactile build chime)
+- Pen Flick (screen annotation stroke)
+- Badge Pop (element callout pop)
+- Whoosh (island expand/dismiss)
 
 Uses native Windows WASAPI/DirectSound via standard winsound/wave in memory.
+Pre-caches studio WAV earcons from spidy/sounds/ with zero latency.
 Zero third-party dependencies, zero latency, no conflicts with mic recording.
 """
 
@@ -16,6 +21,7 @@ import struct
 import wave
 import threading
 import logging
+from pathlib import Path
 from typing import Optional
 
 try:
@@ -63,7 +69,6 @@ def _generate_tone_wav(
         wf.setnchannels(1)
         wf.setsampwidth(2)
         wf.setframerate(sample_rate)
-        # Pack raw 16-bit PCM samples
         packed = struct.pack(f"<{len(raw_samples)}h", *raw_samples)
         wf.writeframes(packed)
 
@@ -71,7 +76,7 @@ def _generate_tone_wav(
 
 
 class SoundEffectsEngine:
-    """Thread-safe sound effects player with pre-cached audio waveforms."""
+    """Thread-safe sound effects player with pre-cached audio waveforms and studio earcons."""
 
     _instance: Optional["SoundEffectsEngine"] = None
 
@@ -79,7 +84,7 @@ class SoundEffectsEngine:
         self.enabled = True
         self._cache: dict[str, bytes] = {}
         self._lock = threading.Lock()
-        self._pregenerate_sounds()
+        self._load_sounds()
 
     @classmethod
     def get_instance(cls) -> "SoundEffectsEngine":
@@ -87,41 +92,64 @@ class SoundEffectsEngine:
             cls._instance = SoundEffectsEngine()
         return cls._instance
 
-    def _pregenerate_sounds(self):
-        """Pre-render audio chimes into memory for zero latency."""
+    def _load_sounds(self):
+        """Load studio earcons from spidy/sounds/ or generate fallback audio chimes."""
+        sounds_dir = Path(__file__).resolve().parent / "sounds"
+        file_map = {
+            "build_3d": "build_3d.wav",
+            "arrival": "target_ping.wav",
+            "target_ping": "target_ping.wav",
+            "pen_flick": "pen_flick.wav",
+            "badge_pop": "badge_pop.wav",
+            "whoosh": "whoosh.wav",
+            "appear": "appear.wav",
+            "ding": "ding.wav",
+            "pop": "pop.wav",
+            "activate": "pop.wav",
+        }
+
+        for key, fname in file_map.items():
+            fpath = sounds_dir / fname
+            if fpath.exists():
+                try:
+                    self._cache[key] = fpath.read_bytes()
+                except Exception as e:
+                    logger.debug(f"Failed to read sound file {fname}: {e}")
+
+        # Fallback tone generation if files are missing
         try:
-            # 1. Activate Chime: Soft rising modern chime (D5 587Hz -> A5 880Hz)
-            self._cache["activate"] = _generate_tone_wav([
-                (587.33, 0.07, 0.45),
-                (880.00, 0.12, 0.55),
-            ])
+            if "activate" not in self._cache:
+                self._cache["activate"] = _generate_tone_wav([
+                    (587.33, 0.07, 0.45),
+                    (880.00, 0.12, 0.55),
+                ])
 
-            # 2. Thinking Pulse: Gentle ambient chord swell
-            self._cache["thinking"] = _generate_tone_wav([
-                (523.25, 0.08, 0.35),
-                (659.25, 0.12, 0.40),
-            ])
+            if "thinking" not in self._cache:
+                self._cache["thinking"] = _generate_tone_wav([
+                    (523.25, 0.08, 0.35),
+                    (659.25, 0.12, 0.40),
+                ])
 
-            # 3. Target Arrival Chime: Crystal retro sparkle (A5 880Hz -> C6 1046Hz -> E6 1318Hz)
-            self._cache["arrival"] = _generate_tone_wav([
-                (880.00, 0.05, 0.40),
-                (1046.50, 0.06, 0.50),
-                (1318.51, 0.14, 0.60),
-            ])
+            if "arrival" not in self._cache:
+                self._cache["arrival"] = _generate_tone_wav([
+                    (880.00, 0.05, 0.40),
+                    (1046.50, 0.06, 0.50),
+                    (1318.51, 0.14, 0.60),
+                ])
 
-            # 4. Dictation Start: Soft warm pop
-            self._cache["dictation_start"] = _generate_tone_wav([
-                (440.00, 0.04, 0.35),
-                (659.25, 0.06, 0.45),
-            ])
+            if "dictation_start" not in self._cache:
+                self._cache["dictation_start"] = _generate_tone_wav([
+                    (440.00, 0.04, 0.35),
+                    (659.25, 0.06, 0.45),
+                ])
 
-            # 5. Dictation Stop / Done: Soft descending confirmation
-            self._cache["dictation_stop"] = _generate_tone_wav([
-                (659.25, 0.04, 0.40),
-                (440.00, 0.08, 0.35),
-            ])
+            if "dictation_stop" not in self._cache:
+                self._cache["dictation_stop"] = _generate_tone_wav([
+                    (659.25, 0.04, 0.40),
+                    (440.00, 0.08, 0.35),
+                ])
         except Exception as e:
-            logger.warning(f"Failed to pre-render sound effects: {e}")
+            logger.warning(f"Failed to pre-render fallback sound effects: {e}")
 
     def is_enabled(self) -> bool:
         cfg = load_config()
@@ -165,9 +193,27 @@ class SoundEffectsEngine:
 
     def play_ding(self):
         """Soft pleasant ding / sparkle chime on successful copy or action."""
-        self.play("arrival")
+        self.play("ding")
+
+    def play_build_3d(self):
+        """Tactile hardware build earcon when 3D model finishes rendering."""
+        self.play("build_3d")
+
+    def play_pen_flick(self):
+        """Tactile pen flick earcon when drawing on screen."""
+        self.play("pen_flick")
+
+    def play_badge_pop(self):
+        """Tactile pop earcon when an indicator or pill appears."""
+        self.play("badge_pop")
+
+    def play_whoosh(self):
+        """Smooth fluid whoosh earcon when HUD expands or collapses."""
+        self.play("whoosh")
+
+    def play_pop(self):
+        self.play("pop")
 
 
 # Global singleton access
 sounds = SoundEffectsEngine.get_instance()
-

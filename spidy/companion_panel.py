@@ -96,7 +96,7 @@ class CompanionPanel(QWidget):
         header = QHBoxLayout()
         header.setSpacing(8)
 
-        self.dot = QLabel("●")
+        self.dot = QLabel("•")
         self.dot.setStyleSheet("color: #3380FF; font-size: 14px; border: none;")
         header.addWidget(self.dot)
 
@@ -150,7 +150,7 @@ class CompanionPanel(QWidget):
 
         # Unified Hotkey Row
         row1 = QHBoxLayout()
-        icon1 = QLabel("✦")
+        icon1 = QLabel("")
         icon1.setStyleSheet("color: #60a5fa; border: none; font-size: 14px; font-weight: bold;")
         t1 = QLabel("Hold Ctrl + Alt: Spidy Voice & Vision")
         t1.setFont(QFont("Segoe UI", 9, QFont.DemiBold))
@@ -310,17 +310,17 @@ class CompanionPanel(QWidget):
         feat_lbl.setStyleSheet("color: #8E8E98; border: none;")
         layout.addWidget(feat_lbl)
 
-        self.chk_sound = QCheckBox("🔊 Interactive Sound Cues")
+        self.chk_sound = QCheckBox("Audio Feedback & Earcons")
         self.chk_sound.setChecked(self.config.get("sound_effects_enabled", True))
         self.chk_sound.setStyleSheet(self._checkbox_style())
         self.chk_sound.toggled.connect(self._on_toggle_sound)
 
-        self.chk_context = QCheckBox("🧠 Active Window Context Awareness")
+        self.chk_context = QCheckBox("Active Window Context Tracking")
         self.chk_context.setChecked(self.config.get("context_awareness", True))
         self.chk_context.setStyleSheet(self._checkbox_style())
         self.chk_context.toggled.connect(self._on_toggle_context)
 
-        self.chk_hud = QCheckBox("💬 Top-Center Glass Dynamic HUD Bar")
+        self.chk_hud = QCheckBox("Top-Center Dynamic HUD Bar")
         self.chk_hud.setChecked(self.config.get("top_bar_hud_enabled", True) and self.config.get("floating_card_enabled", True))
         self.chk_hud.setStyleSheet(self._checkbox_style())
         self.chk_hud.toggled.connect(self._on_toggle_hud)
@@ -332,7 +332,7 @@ class CompanionPanel(QWidget):
         # Test Buttons Row (Sound Chime + Pointing Demo)
         btn_row = QHBoxLayout()
 
-        sound_test_btn = QPushButton("🔔 Test Chimes")
+        sound_test_btn = QPushButton("Test Audio Cues")
         sound_test_btn.setStyleSheet("""
             QPushButton {
                 background: #242430;
@@ -351,7 +351,7 @@ class CompanionPanel(QWidget):
         sound_test_btn.clicked.connect(self._test_sound_cues)
         btn_row.addWidget(sound_test_btn)
 
-        demo_btn = QPushButton("✨ Pointing Demo")
+        demo_btn = QPushButton("Test Screen Pointer")
         demo_btn.setStyleSheet("""
             QPushButton {
                 background: #242430;
@@ -503,7 +503,7 @@ class CompanionPanel(QWidget):
         else:
             self.status_lbl.setText("Failed")
             self.status_lbl.setStyleSheet("color: #FF5555; border: none;")
-            self.provider_hint.setText(f"✕ {msg[:45]}...")
+            self.provider_hint.setText(f"[ERR] {msg[:45]}...")
             self.provider_hint.setStyleSheet("color: #FF5555; border: none; font-size: 10px;")
 
     def _save_key(self):

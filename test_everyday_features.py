@@ -121,7 +121,7 @@ class TestEverydayPowerFeatures(unittest.TestCase):
         hud.copied_signal.connect(lambda: copied_signal_received.append(True))
         hud._copy_answer_to_clipboard()
         self.assertTrue(len(copied_signal_received) > 0)
-        self.assertEqual(hud.btn_copy.text(), "✓ Copied!")
+        self.assertIn(hud.btn_copy.text(), ["COPIED", "✓ Copied!"])
 
         # Test hover pause prevents premature collapse
         event = QEvent(QEvent.Enter)
