@@ -253,7 +253,8 @@ class CompanionManager(QObject):
         # Strip unclosed or closed [HEARD: ...] tags
         cleaned = re.sub(r"\[HEARD:[^\]\r\n]*(?:\]|\r?\n|$)", "", cleaned, flags=re.IGNORECASE)
         # Strip lines starting with "Heard: ..." or "Heard, ..."
-        cleaned = re.sub(r"^\s*\[?Heard[:,\s]+[^\r\n]*\r?\n?", "", cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r"(?:^|\r?\n|\.\s+)\s*\[?Heard[:,\s]+[^\r\n.]*(?:\.|\r?\n|$)", "", cleaned, flags=re.IGNORECASE | re.MULTILINE)
+        cleaned = re.sub(r"^\s*\[?Heard[:,\s]+[^\r\n]*\r?\n?", "", cleaned, flags=re.IGNORECASE | re.MULTILINE)
         # Remove [POINT:...], [DRAW:...], [SIMULATE:...], [WRITE:...], [TRACE:...], [OFFER_SEARCH:...], [ACTION:...], [REMEMBER:...], etc.
         cleaned = re.sub(r"\[(?:POINT|DRAW|SIMULATE|WRITE|TRACE|OFFER_SEARCH|ACTION|REMEMBER)[^\]\r\n]*(?:\]|\r?\n|$)", "", cleaned, flags=re.IGNORECASE)
         # Strip any other bracketed expressions like [POINT:none] or stray brackets

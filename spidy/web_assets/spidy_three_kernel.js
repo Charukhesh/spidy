@@ -1,14 +1,21 @@
 /**
  * Spidy Universal Procedural 3D Geometry Kernel.
- * Reconstructed from HeyClicky's Three.js architectural kernel (clicky-three-parts.js).
+ * Reconstructed from HeyClicky's Three.js architectural kernel (clicky-three-parts.js & HeyClicky.Drawing3D).
  *
  * Implements:
+ * - Cook-Torrance GGX PBR Pipeline with MeshPhysicalMaterial, clearcoat, specular roughness, transmission
+ * - Complete HeyClicky-calibrated physical materials: steel, chrome, alu, titanium, brass, copper, gold, glass, rubber, carbon, paint:*, glow:*
+ * - CAD technical edge line generator (EdgesGeometry) for crisp part boundaries and silhouette separation
+ * - Compound procedural operators:
+ *     - around: { count, axis, center, arc } (radial replication)
+ *     - copies: { count, step, turn } (linear repetition)
+ *     - mirror: 'x' | 'y' | 'z' | ['x', 'z'] (bilateral / quad symmetry)
+ *     - cyl: { from: [x1,y1,z1], to: [x2,y2,z2], r } (direct 3D point connection)
  * - Automatic quadratic Bézier bevels (roundCorner / roundOutline) so machined edges catch specular light
  * - Solidify wall thickness for hollow pipes, shells, and cutaway domes
  * - Soft organic shapes (smooth-union metaballs meshed with surface nets)
- * - 15+ procedural primitives: box, cyl, cone, tube, arrow, lathe, sphere, torus, capsule, pipe, spring, gear, extrude, blob, poly, surface
- * - Spidy Real Tones PBR material palette (crimson, ink, slate, amber, steel, navy, chalk)
- * - 3-Point Studio Lighting + contact ground shadow plane
+ * - 16 procedural primitives: box, cyl, cone, tube, arrow, lathe, sphere, torus, capsule, pipe, spring, gear, extrude, blob, poly, surface
+ * - 4-Softbox Studio Lighting Rig + contact ground shadow plane
  * - 3D-to-2D projected leader lines and floating callout pills
  */
 
@@ -33,21 +40,48 @@
   const SPIDY_TONES = {
     crimson: '#DC2626',
     red: '#E5484D',
-    ink: '#1C1E24',
-    slate: '#8B8E93',
+    ink: '#141618',
+    slate: '#7E848D',
     grey: '#64748B',
-    amber: '#D6A83C',
-    gold: '#E0C477',
-    steel: '#8AAFCC',
-    navy: '#2F5689',
-    white: '#E8E6E1',
-    dark: '#111827',
-    orange: '#C9692E',
-    peach: '#D8A287',
-    mint: '#94BCA2',
-    leaf: '#53794A',
-    bronze: '#6D4A2F',
+    amber: '#F59E0B',
+    gold: '#F2C14E',
+    steel: '#8E99A8',
+    navy: '#1E3A5F',
+    white: '#ECEEED',
+    dark: '#101211',
+    orange: '#EA580C',
+    peach: '#FDBA74',
+    mint: '#6EE7B7',
+    leaf: '#16A34A',
+    bronze: '#78350F',
     titanium: '#CBD5E1',
+    brass: '#D2A64C',
+    copper: '#CC7F55',
+    chrome: '#FFFFFF',
+    rubber: '#23272D',
+    carbon: '#181A1D',
+  };
+
+  // ---------------------------------------------------------------- CALIBRATED PHYSICAL PRESETS
+  const PHYSICAL_PRESETS = {
+    steel: { color: '#8E99A8', metalness: 0.90, roughness: 0.22, clearcoat: 0.20, clearcoatRoughness: 0.20 },
+    chrome: { color: '#FFFFFF', metalness: 1.00, roughness: 0.04, clearcoat: 1.00, clearcoatRoughness: 0.04 },
+    alu: { color: '#C2C8CF', metalness: 0.85, roughness: 0.35, clearcoat: 0.10 },
+    aluminum: { color: '#C2C8CF', metalness: 0.85, roughness: 0.35, clearcoat: 0.10 },
+    titanium: { color: '#CBD5E1', metalness: 0.82, roughness: 0.28, clearcoat: 0.15, clearcoatRoughness: 0.25 },
+    brass: { color: '#D2A64C', metalness: 0.88, roughness: 0.24, clearcoat: 0.20 },
+    copper: { color: '#CC7F55', metalness: 0.90, roughness: 0.22, clearcoat: 0.20 },
+    gold: { color: '#F2C14E', metalness: 0.92, roughness: 0.18, clearcoat: 0.30 },
+    glass: { color: '#FAF7F0', metalness: 0.00, roughness: 0.05, transmission: 0.92, transparent: true, opacity: 0.35, ior: 1.52, thickness: 0.50 },
+    rubber: { color: '#23272D', metalness: 0.02, roughness: 0.88 },
+    carbon: { color: '#181A1D', metalness: 0.15, roughness: 0.45, clearcoat: 0.60, clearcoatRoughness: 0.20 },
+    'paint:crimson': { color: '#DC2626', metalness: 0.15, roughness: 0.22, clearcoat: 0.85, clearcoatRoughness: 0.10 },
+    'paint:slate': { color: '#24272B', metalness: 0.25, roughness: 0.38, clearcoat: 0.20 },
+    'paint:navy': { color: '#1E3A5F', metalness: 0.20, roughness: 0.30, clearcoat: 0.40 },
+    'paint:chalk': { color: '#ECEEED', metalness: 0.05, roughness: 0.30, clearcoat: 0.30 },
+    'glow:amber': { color: '#101211', emissive: '#F59E0B', emissiveIntensity: 2.2, roughness: 0.20 },
+    'glow:crimson': { color: '#101211', emissive: '#DC2626', emissiveIntensity: 2.0, roughness: 0.20 },
+    'glow:cyan': { color: '#101211', emissive: '#38BDF8', emissiveIntensity: 2.2, roughness: 0.20 },
   };
 
   const getTone = (colorName, fallback) => {
@@ -59,6 +93,7 @@
   // ---------------------------------------------------------------- AXES & ORIENTATION
   const AXES = { x: [1, 0, 0], y: [0, 1, 0], z: [0, 0, 1] };
   function axisVector(axis) {
+    if (!axis) return null;
     if (typeof axis === 'string') {
       const m = /^\s*([+-]?)\s*([xyz])\s*$/i.exec(axis);
       if (!m) return null;
@@ -243,11 +278,28 @@
       const s = Array.isArray(o.size) ? o.size : [o.w, o.h, o.d];
       const w = pos(s[0], 1), h = pos(s[1], 1), d = pos(s[2], 1);
       const r = Math.min(num(o.r, num(o.bevel, 0)), Math.min(w, h, d) * 0.45);
-      // Box with rounded edges
       return r > 0.0005 ? createRoundedBoxGeometry(w, h, d, r, 3) : new T.BoxGeometry(w, h, d);
     },
 
     cyl(o) {
+      // Direct point-to-point cylinder connection: { from: [x,y,z], to: [x,y,z], r }
+      if (o.from && o.to) {
+        const p1 = vec3(o.from) || new T.Vector3(0, 0, 0);
+        const p2 = vec3(o.to) || new T.Vector3(0, 1, 0);
+        const dir = p2.clone().sub(p1);
+        const len = dir.length();
+        const r = pos(o.r, 0.1);
+        const seg = clamp(Math.round(num(o.seg, 32)), 8, 64);
+        const g = new T.CylinderGeometry(r, r, len, seg);
+        g.translate(0, len / 2, 0);
+        if (len > 1e-6) {
+          const quat = new T.Quaternion().setFromUnitVectors(new T.Vector3(0, 1, 0), dir.normalize());
+          g.applyQuaternion(quat);
+        }
+        g.translate(p1.x, p1.y, p1.z);
+        return g;
+      }
+
       const r = pos(o.r, 0.5), top = Math.max(0, num(o.top, r));
       const seg = clamp(Math.round(num(o.seg, 48)), 3, 128), h = pos(o.h, 1);
       const arc = clamp(num(o.arc, 360), 1, 360) * Math.PI / 180;
@@ -315,16 +367,16 @@
     sphere(o) {
       const r = pos(o.r, 0.5);
       const theta = o.dome === true ? Math.PI / 2 : Math.PI;
-      return turnTo(new T.SphereGeometry(r, 36, 24, 0, Math.PI * 2, 0, theta), o.axis);
+      return turnTo(new T.SphereGeometry(r, 48, 32, 0, Math.PI * 2, 0, theta), o.axis);
     },
 
     torus(o) {
       const arc = clamp(num(o.arc, 360), 1, 360) * Math.PI / 180;
-      return turnTo(new T.TorusGeometry(pos(o.r, 1), pos(o.tube, 0.2), 20, 60, arc), o.axis || 'y', 'z');
+      return turnTo(new T.TorusGeometry(pos(o.r, 1), pos(o.tube, 0.2), 24, 72, arc), o.axis || 'y', 'z');
     },
 
     capsule(o) {
-      return turnTo(new T.CapsuleGeometry(pos(o.r, 0.3), Math.max(0, num(o.h, 1)), 8, 20), o.axis);
+      return turnTo(new T.CapsuleGeometry(pos(o.r, 0.3), Math.max(0, num(o.h, 1)), 12, 28), o.axis);
     },
 
     pipe(o) {
@@ -373,7 +425,7 @@
         bevelSize: bevel,
         bevelThickness: bevel,
         bevelSegments: 2,
-        curveSegments: 4
+        curveSegments: 6
       });
       g.translate(0, 0, -width / 2);
       return turnTo(g, o.axis || 'z', 'z');
@@ -390,14 +442,14 @@
         bevelSize: bevel,
         bevelThickness: bevel,
         bevelSegments: 2,
-        curveSegments: 12
+        curveSegments: 16
       });
       g.translate(0, 0, -depth / 2);
       return turnTo(g, o.axis || 'z', 'z');
     },
 
     blob(o) {
-      const g = new T.IcosahedronGeometry(pos(o.r, 1), 3);
+      const g = new T.IcosahedronGeometry(pos(o.r, 1), 4);
       const posAttr = g.attributes.position;
       const v = new T.Vector3();
       const seed = num(o.seed, 1.5);
@@ -450,7 +502,7 @@
     }
   };
 
-  // Helper for rounded box geometry when RoundedBoxGeometry isn't built into core Three.js
+  // Helper for rounded box geometry
   function createRoundedBoxGeometry(width, height, depth, radius, segments) {
     radius = Math.min(radius, width / 2, height / 2, depth / 2);
     const shape = new T.Shape();
@@ -476,9 +528,10 @@
     return geom;
   }
 
-  // ---------------------------------------------------------------- BUILD PART
+  // ---------------------------------------------------------------- BUILD GEOMETRY
   function buildGeometry(kind, recipe) {
-    const make = SHAPES[kind] || SHAPES[kind.toLowerCase()] || SHAPES.box;
+    const key = (kind || recipe.kind || recipe.shape || 'box').toLowerCase();
+    const make = SHAPES[key] || SHAPES.box;
     let g = make(recipe);
 
     const thick = num(recipe.thick, 0);
@@ -494,18 +547,26 @@
   // ---------------------------------------------------------------- SPIDY 3D KERNEL EXPORT
   global.SpidyThreeKernel = {
     SPIDY_TONES,
+    PHYSICAL_PRESETS,
     getTone,
     buildGeometry,
 
     /**
-     * Create PBR Material with Spidy aesthetics
+     * Create Cook-Torrance GGX PBR Material with calibrated physical presets
      */
     createMaterial(recipe, options = {}) {
-      const colorHex = getTone(recipe.color, options.defaultColor || SPIDY_TONES.crimson);
-      const isMetal = recipe.metal !== undefined ? (recipe.metal ? 0.85 : 0.1) : num(recipe.metalness, 0.4);
-      const roughness = num(recipe.roughness, 0.3);
-      const opacity = num(recipe.opacity, 1.0);
-      const transparent = opacity < 0.999 || recipe.transparent === true;
+      const matKey = (recipe.material || recipe.color || '').toLowerCase();
+      const preset = PHYSICAL_PRESETS[matKey] || PHYSICAL_PRESETS[recipe.material] || {};
+
+      const colorHex = preset.color || getTone(recipe.color, options.defaultColor || SPIDY_TONES.crimson);
+      const isMetal = preset.metalness !== undefined ? preset.metalness : (recipe.metal !== undefined ? (recipe.metal ? 0.88 : 0.1) : num(recipe.metalness, 0.4));
+      const roughness = preset.roughness !== undefined ? preset.roughness : num(recipe.roughness, 0.3);
+      const opacity = preset.opacity !== undefined ? preset.opacity : num(recipe.opacity, 1.0);
+      const transparent = opacity < 0.999 || preset.transparent === true || recipe.transparent === true;
+      const clearcoat = preset.clearcoat !== undefined ? preset.clearcoat : num(recipe.clearcoat, 0.0);
+      const clearcoatRoughness = preset.clearcoatRoughness !== undefined ? preset.clearcoatRoughness : num(recipe.clearcoatRoughness, 0.1);
+      const transmission = preset.transmission !== undefined ? preset.transmission : num(recipe.transmission, 0.0);
+      const ior = preset.ior !== undefined ? preset.ior : num(recipe.ior, 1.5);
 
       const matConfig = {
         color: new T.Color(colorHex),
@@ -513,11 +574,20 @@
         roughness: roughness,
         transparent: transparent,
         opacity: opacity,
+        clearcoat: clearcoat,
+        clearcoatRoughness: clearcoatRoughness,
       };
 
-      if (recipe.emissive) {
-        matConfig.emissive = new T.Color(getTone(recipe.emissive, '#000000'));
-        matConfig.emissiveIntensity = num(recipe.emissiveIntensity, 0.5);
+      if (transmission > 0) {
+        matConfig.transmission = transmission;
+        matConfig.ior = ior;
+        matConfig.thickness = num(preset.thickness || recipe.thickness, 0.5);
+      }
+
+      const emissiveColor = preset.emissive || recipe.emissive;
+      if (emissiveColor) {
+        matConfig.emissive = new T.Color(getTone(emissiveColor, '#000000'));
+        matConfig.emissiveIntensity = preset.emissiveIntensity !== undefined ? preset.emissiveIntensity : num(recipe.emissiveIntensity, 0.6);
       }
 
       if (options.clippingPlanes) {
@@ -525,18 +595,155 @@
         matConfig.clipShadows = true;
       }
 
+      // Use MeshPhysicalMaterial for full photorealistic Cook-Torrance GGX pipeline
+      if (T.MeshPhysicalMaterial) {
+        return new T.MeshPhysicalMaterial(matConfig);
+      }
       return new T.MeshStandardMaterial(matConfig);
     },
 
     /**
-     * Build an entire 3D mesh part from a recipe object
+     * Create CAD Blueprint technical edge lines
+     */
+    createEdgesMesh(geometry, edgeColorHex = 0x0a0c0e, opacity = 0.28) {
+      try {
+        const edgesGeom = new T.EdgesGeometry(geometry, 26);
+        const lineMat = new T.LineBasicMaterial({
+          color: edgeColorHex,
+          transparent: true,
+          opacity: opacity,
+          depthTest: true
+        });
+        return new T.LineSegments(edgesGeom, lineMat);
+      } catch (e) {
+        return null;
+      }
+    },
+
+    /**
+     * Build an entire 3D mesh part from a recipe object, with support for:
+     * - around: { count, axis, arc }
+     * - copies: { count, step, turn }
+     * - mirror: 'x' | 'y' | 'z' | ['x', 'z']
      */
     buildPart(partSpec, options = {}) {
       const kind = partSpec.kind || partSpec.shape || 'box';
       const geom = buildGeometry(kind, partSpec);
       const mat = this.createMaterial(partSpec, options);
-      const mesh = new T.Mesh(geom, mat);
 
+      // Single base mesh
+      const createSingleInstance = () => {
+        const mesh = new T.Mesh(geom, mat);
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        if (partSpec.edges !== false && !partSpec.glow && !partSpec.points) {
+          const edges = this.createEdgesMesh(geom, 0x0d0f11, 0.25);
+          if (edges) mesh.add(edges);
+        }
+        return mesh;
+      };
+
+      // 1. Radial Replication: around: { count, axis, arc }
+      if (partSpec.around && partSpec.around.count > 1) {
+        const count = Math.max(2, Math.round(partSpec.around.count));
+        const arc = clamp(num(partSpec.around.arc, 360), 1, 360) * Math.PI / 180;
+        const axisStr = (partSpec.around.axis || 'y').toLowerCase();
+        const rootGroup = new T.Group();
+
+        for (let i = 0; i < count; i++) {
+          const angle = (i / count) * arc;
+          const subMesh = createSingleInstance();
+
+          // Apply initial transform
+          if (partSpec.pos || partSpec.at) {
+            const p = partSpec.pos || partSpec.at;
+            subMesh.position.set(num(p[0], 0), num(p[1], 0), num(p[2], 0));
+          }
+          if (partSpec.rot) {
+            const r = partSpec.rot;
+            subMesh.rotation.set(num(r[0], 0), num(r[1], 0), num(r[2], 0));
+          }
+
+          const pivot = new T.Group();
+          pivot.add(subMesh);
+          if (axisStr === 'x') pivot.rotation.x = angle;
+          else if (axisStr === 'z') pivot.rotation.z = angle;
+          else pivot.rotation.y = angle;
+
+          rootGroup.add(pivot);
+        }
+        if (partSpec.name) rootGroup.name = partSpec.name;
+        return rootGroup;
+      }
+
+      // 2. Linear Repetition: copies: { count, step: [x,y,z], turn: [rx,ry,rz] }
+      if (partSpec.copies && partSpec.copies.count > 1) {
+        const count = Math.max(2, Math.round(partSpec.copies.count));
+        const step = partSpec.copies.step || [0, 1, 0];
+        const turn = partSpec.copies.turn || [0, 0, 0];
+        const rootGroup = new T.Group();
+
+        for (let i = 0; i < count; i++) {
+          const subMesh = createSingleInstance();
+          const basePos = partSpec.pos || partSpec.at || [0, 0, 0];
+          const baseRot = partSpec.rot || [0, 0, 0];
+
+          subMesh.position.set(
+            num(basePos[0], 0) + i * num(step[0], 0),
+            num(basePos[1], 0) + i * num(step[1], 0),
+            num(basePos[2], 0) + i * num(step[2], 0)
+          );
+          subMesh.rotation.set(
+            num(baseRot[0], 0) + i * num(turn[0], 0),
+            num(baseRot[1], 0) + i * num(turn[1], 0),
+            num(baseRot[2], 0) + i * num(turn[2], 0)
+          );
+          rootGroup.add(subMesh);
+        }
+        if (partSpec.name) rootGroup.name = partSpec.name;
+        return rootGroup;
+      }
+
+      // 3. Bilateral Symmetry: mirror: 'x' | 'y' | 'z'
+      if (partSpec.mirror) {
+        const axes = Array.isArray(partSpec.mirror) ? partSpec.mirror : [partSpec.mirror];
+        const rootGroup = new T.Group();
+
+        const baseMesh = createSingleInstance();
+        if (partSpec.pos || partSpec.at) {
+          const p = partSpec.pos || partSpec.at;
+          baseMesh.position.set(num(p[0], 0), num(p[1], 0), num(p[2], 0));
+        }
+        if (partSpec.rot) {
+          const r = partSpec.rot;
+          baseMesh.rotation.set(num(r[0], 0), num(r[1], 0), num(r[2], 0));
+        }
+        rootGroup.add(baseMesh);
+
+        axes.forEach(ax => {
+          const a = String(ax).toLowerCase();
+          const mirrored = createSingleInstance();
+          mirrored.position.copy(baseMesh.position);
+          mirrored.rotation.copy(baseMesh.rotation);
+          if (a === 'x') {
+            mirrored.position.x = -mirrored.position.x;
+            mirrored.scale.x = -1;
+          } else if (a === 'y') {
+            mirrored.position.y = -mirrored.position.y;
+            mirrored.scale.y = -1;
+          } else if (a === 'z') {
+            mirrored.position.z = -mirrored.position.z;
+            mirrored.scale.z = -1;
+          }
+          rootGroup.add(mirrored);
+        });
+
+        if (partSpec.name) rootGroup.name = partSpec.name;
+        return rootGroup;
+      }
+
+      // Default single instance
+      const mesh = createSingleInstance();
       if (partSpec.pos || partSpec.at) {
         const p = partSpec.pos || partSpec.at;
         mesh.position.set(num(p[0], 0), num(p[1], 0), num(p[2], 0));
@@ -549,55 +756,66 @@
         const s = typeof partSpec.scale === 'number' ? [partSpec.scale, partSpec.scale, partSpec.scale] : partSpec.scale;
         mesh.scale.set(num(s[0], 1), num(s[1], 1), num(s[2], 1));
       }
-
-      mesh.castShadow = true;
-      mesh.receiveShadow = true;
       if (partSpec.name) mesh.name = partSpec.name;
 
       return mesh;
     },
 
     /**
-     * Setup 3-Point Studio Lighting + Contact Shadow Plane
+     * Setup 4-Softbox Studio Lighting Rig + Contact Shadow Ground Plane
+     * Direct reconstruction of HeyClicky's Cook-Torrance GGX studio environment
      */
     setupStudioStage(scene) {
-      // 1. Ambient lighting for soft subtle fill
-      const ambient = new T.AmbientLight(0xffffff, 0.55);
+      // 1. Soft Ambient Fill for Cavity Occlusion
+      const ambient = new T.AmbientLight(0xffffff, 0.48);
       scene.add(ambient);
 
-      // 2. Key Light (Warm Key)
-      const keyLight = new T.DirectionalLight(0xfff8f0, 1.2);
-      keyLight.position.set(5, 8, 5);
+      // 2. Warm Key Softbox Light
+      const keyLight = new T.DirectionalLight(0xfff5ea, 1.45);
+      keyLight.position.set(-4.5, 7.5, 5.0);
       keyLight.castShadow = true;
-      keyLight.shadow.mapSize.width = 1024;
-      keyLight.shadow.mapSize.height = 1024;
-      keyLight.shadow.bias = -0.0005;
+      keyLight.shadow.mapSize.width = 2048;
+      keyLight.shadow.mapSize.height = 2048;
+      keyLight.shadow.bias = -0.0001;
+      keyLight.shadow.normalBias = 0.02;
+      keyLight.shadow.camera.near = 0.5;
+      keyLight.shadow.camera.far = 25;
+      keyLight.shadow.camera.left = -6;
+      keyLight.shadow.camera.right = 6;
+      keyLight.shadow.camera.top = 6;
+      keyLight.shadow.camera.bottom = -6;
       scene.add(keyLight);
 
-      // 3. Cool Fill Light
-      const fillLight = new T.DirectionalLight(0x8cb4e8, 0.6);
-      fillLight.position.set(-6, 3, -3);
+      // 3. Cool Side Fill Softbox
+      const fillLight = new T.DirectionalLight(0xd0e2ff, 0.75);
+      fillLight.position.set(6.0, 3.2, 3.0);
       scene.add(fillLight);
 
-      // 4. Rim / Kick Light (Crisp edge highlights)
-      const rimLight = new T.DirectionalLight(0xffffff, 0.8);
-      rimLight.position.set(0, -4, -6);
+      // 4. Overhead Top Softbox (diffuse top reflections on cylinders and curved shells)
+      const topLight = new T.DirectionalLight(0xffffff, 0.45);
+      topLight.position.set(0, 8.5, 0);
+      scene.add(topLight);
+
+      // 5. Electric Rim / Kick Light (edge glancing highlights on dark metals and carbon)
+      const rimLight = new T.DirectionalLight(0xaad4ff, 0.95);
+      rimLight.position.set(2.0, -3.0, -6.5);
       scene.add(rimLight);
 
-      // 5. Contact Shadow Ground Plane underneath
+      // 6. Realistic Radial Ground Contact Shadow Plane
       const canvas = document.createElement('canvas');
-      canvas.width = 128;
-      canvas.height = 128;
+      canvas.width = 256;
+      canvas.height = 256;
       const ctx = canvas.getContext('2d');
-      const grad = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
-      grad.addColorStop(0, 'rgba(16, 18, 20, 0.45)');
-      grad.addColorStop(0.5, 'rgba(16, 18, 20, 0.15)');
-      grad.addColorStop(1, 'rgba(16, 18, 20, 0)');
+      const grad = ctx.createRadialGradient(128, 128, 0, 128, 128, 128);
+      grad.addColorStop(0.00, 'rgba(16, 18, 20, 0.55)');
+      grad.addColorStop(0.35, 'rgba(16, 18, 20, 0.28)');
+      grad.addColorStop(0.70, 'rgba(16, 18, 20, 0.08)');
+      grad.addColorStop(1.00, 'rgba(16, 18, 20, 0.00)');
       ctx.fillStyle = grad;
-      ctx.fillRect(0, 0, 128, 128);
+      ctx.fillRect(0, 0, 256, 256);
 
       const shadowTex = new T.CanvasTexture(canvas);
-      const shadowGeo = new T.PlaneGeometry(8, 8);
+      const shadowGeo = new T.PlaneGeometry(9, 9);
       const shadowMat = new T.MeshBasicMaterial({
         map: shadowTex,
         transparent: true,
@@ -605,10 +823,10 @@
       });
       const groundShadow = new T.Mesh(shadowGeo, shadowMat);
       groundShadow.rotation.x = -Math.PI / 2;
-      groundShadow.position.y = -2.0;
+      groundShadow.position.y = -2.25;
       scene.add(groundShadow);
 
-      return { keyLight, fillLight, rimLight, groundShadow };
+      return { ambient, keyLight, fillLight, topLight, rimLight, groundShadow };
     }
   };
 

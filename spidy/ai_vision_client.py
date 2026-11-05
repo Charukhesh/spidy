@@ -591,7 +591,7 @@ class AIVisionClient:
         remember_item = None
 
         # 0. Parse [HEARD: <exact words>]
-        heard_pattern = re.compile(r"\[HEARD:\s*([^\]\r\n]+)(?:\]|\r?\n|$)", re.IGNORECASE)
+        heard_pattern = re.compile(r"(?:\[HEARD:\s*|^\s*Heard[:,\s]+)([^\]\r\n]+)(?:\]|\r?\n|$)", re.IGNORECASE | re.MULTILINE)
         match_heard = heard_pattern.search(spoken)
         if match_heard:
             heard_prompt = match_heard.group(1).strip()

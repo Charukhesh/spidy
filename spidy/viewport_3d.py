@@ -82,10 +82,12 @@ class Spidy3DViewport(QWidget):
         three_file = assets_dir / "three.min.js"
         controls_file = assets_dir / "OrbitControls.js"
         kernel_file = assets_dir / "spidy_three_kernel.js"
+        procedural_file = assets_dir / "spidy_procedural_library.js"
 
         self.three_js_code = three_file.read_text(encoding="utf-8") if three_file.exists() else ""
         self.orbit_js_code = controls_file.read_text(encoding="utf-8") if controls_file.exists() else ""
         self.kernel_js_code = kernel_file.read_text(encoding="utf-8") if kernel_file.exists() else ""
+        self.procedural_js_code = procedural_file.read_text(encoding="utf-8") if procedural_file.exists() else ""
 
     def _build_ui(self):
         """Build obsidian glass frame containing the 3D WebEngineView."""
@@ -304,6 +306,9 @@ class Spidy3DViewport(QWidget):
 <script>
 {self.kernel_js_code}
 </script>
+<script>
+{self.procedural_js_code}
+</script>
 
 <script>
 (function() {{
@@ -323,7 +328,10 @@ class Spidy3DViewport(QWidget):
         powerPreference: 'high-performance'
     }});
     renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 2, 2.5));
+    renderer.outputEncoding = THREE.sRGBEncoding;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.25;
     renderer.localClippingEnabled = true;
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -335,12 +343,12 @@ class Spidy3DViewport(QWidget):
     controls.maxDistance = 20;
     controls.minDistance = 2;
 
-    // 3. Studio 3-Point Lighting + Contact Shadow via SpidyThreeKernel
+    // 3. Studio 4-Point Softbox Lighting + Contact Shadow via SpidyThreeKernel
     const stage = window.SpidyThreeKernel ? window.SpidyThreeKernel.setupStudioStage(scene) : null;
     if (!stage) {{
         const ambient = new THREE.AmbientLight(0xffffff, 0.8);
         scene.add(ambient);
-        const dir = new THREE.DirectionalLight(0xffffff, 1.0);
+        const dir = new THREE.DirectionalLight(0xffffff, 1.2);
         dir.position.set(5, 8, 5);
         scene.add(dir);
     }}
@@ -355,27 +363,19 @@ class Spidy3DViewport(QWidget):
 
     // 5. Procedural Geometry Synthesis Engine
     function buildModel() {{
-        const entity = spec.entity || 'generic';
-
         // Check if caller supplied explicit procedural part recipes
         if (spec.primitives && spec.primitives.length > 0) {{
             buildFromRecipes(spec.primitives);
         }} else if (spec.options && spec.options.parts && spec.options.parts.length > 0) {{
             buildFromRecipes(spec.options.parts);
-        }} else if (entity.includes('dna') || entity.includes('helix')) {{
-            buildDNAHelix();
-        }} else if (entity.includes('jet') || entity.includes('f35') || entity.includes('engine') || entity.includes('turbine')) {{
-            buildTurbofanEngine();
-        }} else if (entity.includes('gear') || entity.includes('differential') || entity.includes('transmission')) {{
-            buildDifferentialGears();
-        }} else if (entity.includes('atom') || entity.includes('quantum') || entity.includes('bohr')) {{
-            buildAtomModel();
-        }} else if (entity.includes('solar') || entity.includes('orbit') || entity.includes('planet')) {{
-            buildSolarSystem();
-        }} else if (entity.includes('heart') || entity.includes('pump') || entity.includes('valve')) {{
-            buildHeartPump();
+        }} else if (window.SpidyProceduralLibrary) {{
+            window.SpidyProceduralLibrary.build(modelGroup, spec, clipPlane);
         }} else {{
-            buildTurbofanEngine();
+            // Direct kernel fallback
+            const fallbackMesh = K.buildPart({{
+                kind: 'gear', r: 1.5, teeth: 24, w: 0.4, bevel: 0.04, material: 'paint:crimson', axis: 'z'
+            }});
+            modelGroup.add(fallbackMesh);
         }}
     }}
 
@@ -389,244 +389,6 @@ class Spidy3DViewport(QWidget):
                 modelGroup.add(mesh);
             }}
         }});
-    }}
-
-    // Model: DNA Double Helix with Beveled Rungs
-    function buildDNAHelix() {{
-        const turns = 3;
-        const radius = 1.2;
-        const height = 4.5;
-        const steps = 48;
-        const curve1Pts = [];
-        const curve2Pts = [];
-
-        for (let i = 0; i <= steps; i++) {{
-            const t = (i / steps);
-            const angle = t * turns * Math.PI * 2;
-            const y = (t - 0.5) * height;
-            const x1 = Math.cos(angle) * radius;
-            const z1 = Math.sin(angle) * radius;
-            const x2 = Math.cos(angle + Math.PI) * radius;
-            const z2 = Math.sin(angle + Math.PI) * radius;
-
-            curve1Pts.push(new THREE.Vector3(x1, y, z1));
-            curve2Pts.push(new THREE.Vector3(x2, y, z2));
-
-            if (i % 3 === 0 && K) {{
-                const rung = K.buildPart({{
-                    kind: 'cyl',
-                    r: 0.06,
-                    h: radius * 2,
-                    bevel: 0.015,
-                    color: (i % 6 === 0) ? 'crimson' : 'amber',
-                    metalness: 0.4,
-                    roughness: 0.35,
-                    pos: [0, y, 0],
-                    rot: [0, -angle, Math.PI / 2]
-                }});
-                modelGroup.add(rung);
-            }}
-        }}
-
-        if (K) {{
-            const strand1 = K.buildPart({{ kind: 'pipe', points: curve1Pts.map(p => [p.x, p.y, p.z]), r: 0.12, color: 'crimson', metalness: 0.6 }});
-            const strand2 = K.buildPart({{ kind: 'pipe', points: curve2Pts.map(p => [p.x, p.y, p.z]), r: 0.12, color: 'crimson', metalness: 0.6 }});
-            modelGroup.add(strand1);
-            modelGroup.add(strand2);
-        }}
-    }}
-
-    // Model: Turbofan Engine with Beveled Nacelle, Shaft, and Titanium Blades
-    function buildTurbofanEngine() {{
-        if (!K) return;
-
-        // Outer Nacelle Housing (Hollow beveled tube with cutaway support)
-        const nacelle = K.buildPart({{
-            kind: 'tube',
-            r: 1.8,
-            inner: 1.6,
-            h: 4.2,
-            bevel: 0.08,
-            color: 'crimson',
-            opacity: spec.cutaway ? 0.38 : 0.90,
-            metalness: 0.7,
-            roughness: 0.25,
-            axis: 'x'
-        }}, {{ clippingPlanes: spec.cutaway ? [clipPlane] : null }});
-        modelGroup.add(nacelle);
-
-        // Central Titanium Shaft
-        const shaft = K.buildPart({{
-            kind: 'cyl',
-            r: 0.3,
-            h: 4.0,
-            bevel: 0.04,
-            color: 'slate',
-            metalness: 0.85,
-            roughness: 0.2,
-            axis: 'x'
-        }});
-        modelGroup.add(shaft);
-
-        // Nose Spinner Cone with smooth bevel
-        const cone = K.buildPart({{
-            kind: 'cone',
-            r: 0.5,
-            h: 1.0,
-            bevel: 0.05,
-            color: 'crimson',
-            metalness: 0.8,
-            roughness: 0.2,
-            pos: [1.9, 0, 0],
-            axis: 'x'
-        }});
-        modelGroup.add(cone);
-
-        // Aerodynamic Titanium Fan Rotor Blades
-        const bladesGroup = new THREE.Group();
-        bladesGroup.name = "rotorBlades";
-        for (let i = 0; i < 16; i++) {{
-            const angle = (i / 16) * Math.PI * 2;
-            const blade = K.buildPart({{
-                kind: 'box',
-                w: 0.04,
-                h: 1.15,
-                d: 0.20,
-                bevel: 0.01,
-                color: 'titanium',
-                metalness: 0.95,
-                roughness: 0.15,
-                pos: [0, Math.cos(angle) * 0.9, Math.sin(angle) * 0.9],
-                rot: [angle + 0.4, 0, 0]
-            }});
-            bladesGroup.add(blade);
-        }}
-        bladesGroup.position.x = 1.4;
-        modelGroup.add(bladesGroup);
-
-        // Combustor Core Ring (Glowing Amber)
-        const combustor = K.buildPart({{
-            kind: 'torus',
-            r: 0.7,
-            tube: 0.16,
-            color: 'amber',
-            emissive: 'amber',
-            emissiveIntensity: 0.9,
-            metalness: 0.4,
-            roughness: 0.4,
-            pos: [-0.4, 0, 0],
-            axis: 'x'
-        }});
-        modelGroup.add(combustor);
-
-        // Exhaust Thrust Vector Arrow
-        const arrow = K.buildPart({{
-            kind: 'arrow',
-            points: [[-1.2, 0, 0], [-2.4, 0, 0]],
-            r: 0.08,
-            color: 'amber',
-            emissive: 'amber',
-            emissiveIntensity: 0.6
-        }});
-        modelGroup.add(arrow);
-    }}
-
-    // Model: Differential & Interlocking Spur Gears with True Beveled Involute Teeth
-    function buildDifferentialGears() {{
-        if (!K) return;
-
-        // Drive pinion gear (Crimson)
-        const gear1 = K.buildPart({{
-            kind: 'gear',
-            r: 1.1,
-            teeth: 18,
-            w: 0.35,
-            hole: 0.25,
-            bevel: 0.02,
-            color: 'crimson',
-            metalness: 0.85,
-            roughness: 0.25,
-            pos: [-1.05, 0, 0],
-            axis: 'z'
-        }});
-        gear1.name = "gear1";
-        modelGroup.add(gear1);
-
-        // Driven crown gear (Slate / Steel)
-        const gear2 = K.buildPart({{
-            kind: 'gear',
-            r: 1.1,
-            teeth: 18,
-            w: 0.35,
-            hole: 0.25,
-            bevel: 0.02,
-            color: 'steel',
-            metalness: 0.85,
-            roughness: 0.25,
-            pos: [1.05, 0, 0],
-            rot: [0, 0, Math.PI / 18],
-            axis: 'z'
-        }});
-        gear2.name = "gear2";
-        modelGroup.add(gear2);
-
-        // Mounting Pinion Shafts
-        const shaft1 = K.buildPart({{ kind: 'cyl', r: 0.18, h: 2.5, bevel: 0.02, color: 'ink', metalness: 0.7, pos: [-1.05, 0, 0], axis: 'z' }});
-        const shaft2 = K.buildPart({{ kind: 'cyl', r: 0.18, h: 2.5, bevel: 0.02, color: 'ink', metalness: 0.7, pos: [1.05, 0, 0], axis: 'z' }});
-        modelGroup.add(shaft1);
-        modelGroup.add(shaft2);
-    }}
-
-    // Model: Atom Model with Electron Cloud Orbits
-    function buildAtomModel() {{
-        if (!K) return;
-        // Nucleus
-        const nucleus = K.buildPart({{ kind: 'sphere', r: 0.65, bevel: 0.05, color: 'crimson', emissive: 'crimson', emissiveIntensity: 0.5, metalness: 0.5 }});
-        modelGroup.add(nucleus);
-
-        // 3 Orbital Rings
-        const angles = [0, Math.PI / 3, -Math.PI / 3];
-        angles.forEach((ang, idx) => {{
-            const ring = K.buildPart({{ kind: 'torus', r: 1.8, tube: 0.035, color: 'slate', metalness: 0.8, rot: [ang, ang * 0.5, 0] }});
-            modelGroup.add(ring);
-            const electron = K.buildPart({{ kind: 'sphere', r: 0.12, color: 'amber', emissive: 'amber', emissiveIntensity: 0.8, pos: [Math.cos(ang) * 1.8, Math.sin(ang) * 1.8, 0] }});
-            modelGroup.add(electron);
-        }});
-    }}
-
-    // Model: Solar System orbits
-    function buildSolarSystem() {{
-        if (!K) return;
-        const sun = K.buildPart({{ kind: 'sphere', r: 0.9, color: 'amber', emissive: 'amber', emissiveIntensity: 0.95 }});
-        modelGroup.add(sun);
-
-        const planets = [
-            {{ r: 1.5, size: 0.12, color: 'slate' }},
-            {{ r: 2.2, size: 0.20, color: 'steel' }},
-            {{ r: 2.9, size: 0.22, color: 'crimson' }},
-        ];
-        planets.forEach(p => {{
-            const orbit = K.buildPart({{ kind: 'torus', r: p.r, tube: 0.02, color: 'slate', rot: [Math.PI / 2, 0, 0] }});
-            modelGroup.add(orbit);
-            const body = K.buildPart({{ kind: 'sphere', r: p.size, color: p.color, metalness: 0.4, pos: [p.r, 0, 0] }});
-            modelGroup.add(body);
-        }});
-    }}
-
-    // Model: Heart Pump with Smooth Organic Muscle & Aorta Pipe
-    function buildHeartPump() {{
-        if (!K) return;
-        const chamber = K.buildPart({{ kind: 'blob', r: 1.3, lumps: 0.18, seed: 2.2, color: 'crimson', metalness: 0.3, roughness: 0.4 }});
-        modelGroup.add(chamber);
-
-        const aorta = K.buildPart({{
-            kind: 'pipe',
-            points: [[0, 0.8, 0], [0.3, 1.8, 0], [0.9, 1.9, 0.4], [1.2, 1.4, 0.2]],
-            r: 0.32,
-            color: 'red',
-            metalness: 0.4
-        }});
-        modelGroup.add(aorta);
     }}
 
     buildModel();
@@ -694,7 +456,7 @@ class Spidy3DViewport(QWidget):
 
         // Auto entrance spin
         if (autoRotateFrames > 0) {{
-            modelGroup.rotation.y += 0.012;
+            modelGroup.rotation.y += 0.008;
             autoRotateFrames--;
             needsRender = true;
         }}
@@ -707,6 +469,15 @@ class Spidy3DViewport(QWidget):
         }}
 
         // Differential gear mesh rotation
+        const dp = modelGroup.getObjectByName("drivePinion");
+        const cg = modelGroup.getObjectByName("crownGear");
+        if (dp && cg && autoRotateFrames > 0) {{
+            dp.rotation.z += 0.04;
+            cg.rotation.x -= 0.013;
+            needsRender = true;
+        }}
+
+        // Backward compatibility gear1 / gear2
         const g1 = modelGroup.getObjectByName("gear1");
         const g2 = modelGroup.getObjectByName("gear2");
         if (g1 && g2 && autoRotateFrames > 0) {{
